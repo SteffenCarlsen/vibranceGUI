@@ -54,5 +54,8 @@ namespace vibrance.GUI.common
             }
             return false;
         }
+
+        public override int GetHashCode() => HashCode.Combine(DmPelsWidth, DmPelsHeight,
+            DmBitsPerPel, DmDisplayFrequency, DmDisplayFixedOutput);
     }
 }
