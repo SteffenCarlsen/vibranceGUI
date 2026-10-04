@@ -4,6 +4,12 @@
 
 vibranceGUI switches NVIDIA digital vibrance or AMD saturation when a configured game is in the foreground, then restores your configured desktop level when you leave it. This fork modernizes the GPU integrations, runtime, interface, and profile handling while retaining the original application's purpose.
 
+| Dark mode | Light mode |
+| --- | --- |
+| <img src="docs/images/vibrancegui-dark.png" alt="vibranceGUI fork in dark mode with game profiles and desktop vibrance settings" width="360"> | <img src="docs/images/vibrancegui-light.png" alt="vibranceGUI fork in light mode with game profiles and desktop vibrance settings" width="360"> |
+
+*Screenshots of version 3.0.0.0. The resolution label "Windows" shown here is now "Unchanged".*
+
 | Purpose | Link |
 | --- | --- |
 | Fork repository and project homepage | [SteffenCarlsen/vibranceGUI](https://github.com/SteffenCarlsen/vibranceGUI) |
@@ -235,6 +241,7 @@ The pause/toggle idea is selectively reimplemented from original [PR #153](https
 2. Pointed application/project links and assembly repository metadata to this fork.
 3. Removed original follow/donation prompts from the main window/tray. About retains juv / juvlarN and juRiiir3 credits, original GitHub links, and the original developer's support link.
 4. Added the application icon and full version/source revision to About, with consistent ordinary body-text colors, plus documentation of fork support channels, original-project references, compatibility evidence, and this dated changelog.
+5. Added side-by-side Dark/Light screenshots of the fork to this README.
 
 #### Focused commit index
 
