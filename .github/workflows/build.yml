@@ -21,6 +21,8 @@ jobs:
         run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release
       - name: Live theme switching checks
         run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --theme-switch artifacts/theme-switch
+      - name: Shortcut editor checks
+        run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --hotkey-ui artifacts/hotkey-ui
       - name: Publish portable executable
         shell: pwsh
         run: ./scripts/publish.ps1

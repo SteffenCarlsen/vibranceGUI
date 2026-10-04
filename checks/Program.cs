@@ -27,6 +27,16 @@ internal static class Checks
                 CheckLiveThemeSwitch(args[1]);
                 return 0;
             }
+            if (args.Length == 2 && args[0] == "--hotkey-ui")
+            {
+                CheckHotkeyUi(args[1]);
+                return 0;
+            }
+            if (args.Length == 1 && args[0] == "--hotkey-native")
+            {
+                CheckNativeHotkeys();
+                return 0;
+            }
             if (args.Length == 3 && args[0] == "--render")
             {
                 Application.EnableVisualStyles();
@@ -55,6 +65,7 @@ internal static class Checks
             CheckSettings(directory);
             CheckEquality();
             RuntimeChecks.Run();
+            HotkeyChecks.Run(directory);
             Console.WriteLine("PASS: settings roundtrip, independent recovery, Unicode paths, backups, ranges, profile validation and path equality.");
             return 0;
         }
@@ -68,6 +79,106 @@ internal static class Checks
     private static void Assert(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void CheckHotkeyUi(string outputDirectory)
+    {
+        Application.EnableVisualStyles();
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
+        Directory.CreateDirectory(outputDirectory);
+        foreach (var theme in new[] { ThemePreference.Light, ThemePreference.Dark })
+        {
+            AppTheme.Initialize(theme);
+            var backend = new PreviewProxy();
+            using var main = new PreviewWindow(backend);
+            PrepareOffscreen(main);
+            Application.DoEvents();
+            int mutations = backend.MutatingCalls;
+            IntPtr mainHandle = main.Handle;
+            var shortcut = (Button)main.Controls.Find("buttonPauseHotkey", true).Single();
+            string originalLabel = shortcut.Text;
+            int attempts = 0;
+            bool collision = true;
+            using var dialog = new PreviewHotkeyDialog(PauseHotkey.Default, keyData =>
+            {
+                attempts++;
+                return collision ? "This shortcut is already in use.\n\nThe current shortcut remains active. Choose another key." : main.ApplyPauseHotkey(keyData);
+            });
+            PrepareOffscreen(dialog);
+            Application.DoEvents();
+            var field = (TextBox)dialog.Controls.Find("textBoxHotkey", true).Single();
+            var save = (Button)dialog.Controls.Find("buttonSave", true).Single();
+            var feedback = (Label)dialog.Controls.Find("labelHotkeyStatus", true).Single();
+            var capture = field.GetType().GetMethod("ProcessCmdKey", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            object[] input = { Message.Create(field.Handle, 0x100, IntPtr.Zero, IntPtr.Zero), Keys.Control | Keys.Shift | Keys.P };
+            Assert((bool)capture.Invoke(field, input)!, "The shortcut field did not consume a shortcut keydown.");
+            Assert(dialog.KeyData == (Keys.Control | Keys.Shift | Keys.P) && field.Text == "Ctrl+Shift+P",
+                "The actual shortcut input path did not record/display the selected chord.");
+            dialog.CaptureShortcut(Keys.ControlKey | Keys.Control);
+            dialog.CaptureShortcut(Keys.F12);
+            Assert(dialog.KeyData == (Keys.Control | Keys.Shift | Keys.P), "Invalid input replaced the last valid shortcut.");
+            save.PerformClick();
+            Application.DoEvents();
+            Assert(attempts == 1 && dialog.Visible && dialog.DialogResult != DialogResult.OK && shortcut.Text == originalLabel,
+                "A collision closed the editor or changed the current shortcut.");
+            CaptureWindow(dialog, Path.Combine(outputDirectory, theme + "-collision.png"));
+            Assert(feedback.Bottom <= save.Parent!.Top && save.RectangleToScreen(save.ClientRectangle).Bottom <= dialog.RectangleToScreen(dialog.ClientRectangle).Bottom,
+                "Shortcut feedback or Save button is clipped.");
+            collision = false;
+            save.PerformClick();
+            Application.DoEvents();
+            Assert(attempts == 2 && dialog.DialogResult == DialogResult.OK && shortcut.Text == "Ctrl+Shift+P",
+                "Saving the shortcut did not immediately update the main window.");
+            using var cancel = new PreviewHotkeyDialog(Keys.Control | Keys.Shift | Keys.P, _ => throw new InvalidOperationException("Cancel committed a candidate."));
+            PrepareOffscreen(cancel);
+            Application.DoEvents();
+            cancel.CaptureShortcut(Keys.F8);
+            CaptureWindow(cancel, Path.Combine(outputDirectory, theme + "-capture.png"));
+            ((Button)cancel.Controls.Find("buttonCancel", true).Single()).PerformClick();
+            Assert(cancel.DialogResult != DialogResult.OK && shortcut.Text == "Ctrl+Shift+P", "Cancel applied an unsaved candidate.");
+            Assert(main.Handle == mainHandle && backend.MutatingCalls == mutations,
+                "Shortcut editing recreated the main window or changed GPU/monitoring state.");
+            CaptureWindow(main, Path.Combine(outputDirectory, theme + "-main.png"));
+            main.Size = main.MinimumSize;
+            CaptureWindow(main, Path.Combine(outputDirectory, theme + "-main-minimum.png"));
+        }
+        Console.WriteLine("PASS: actual shortcut keydown capture, validation, collision/retry and cancel; immediate label update; Light/Dark renders; unchanged main HWND and zero GPU/monitor lifecycle calls.");
+    }
+
+    private static void CheckNativeHotkeys()
+    {
+        // Hidden task-owned HWNDs only. No key injection, settings, GPU, or user-app calls.
+        using var firstWindow = new Form();
+        using var secondWindow = new Form();
+        var first = new PauseHotkeyBinding();
+        var second = new PauseHotkeyBinding();
+        Keys chord = Keys.None;
+        try
+        {
+            foreach (Keys key in new[] { Keys.F24, Keys.F23, Keys.F22, Keys.F21 })
+                if (first.TrySet(firstWindow.Handle, Keys.Control | Keys.Alt | Keys.Shift | key, out _))
+                { chord = first.KeyData; break; }
+            Assert(chord != Keys.None, "No unused task-only shortcut was available for native registration smoke.");
+            Assert(!second.TrySet(secondWindow.Handle, chord, out _), "Windows allowed conflicting global shortcut registrations.");
+            Assert(first.IsRegistered && first.KeyData == chord, "A native collision released the working shortcut.");
+            var oldMessage = Message.Create(firstWindow.Handle, 0x0312, (IntPtr)1,
+                (IntPtr)(((int)(chord & Keys.KeyCode) << 16) | 7));
+            Assert(first.Matches(oldMessage), "Native modifier/key message matching failed.");
+            Keys replacement = Keys.None;
+            foreach (Keys key in new[] { Keys.F20, Keys.F19, Keys.F18, Keys.F17 })
+                if (first.TrySet(firstWindow.Handle, Keys.Control | Keys.Alt | Keys.Shift | key, out _))
+                { replacement = first.KeyData; break; }
+            Assert(replacement != Keys.None && !first.Matches(oldMessage), "Native rebind failed or accepted the stale original message.");
+            Assert(second.TrySet(secondWindow.Handle, chord, out string failure), "Native rebind did not release the original shortcut: " + failure);
+            Assert(first.TryClear(out failure) && second.TryClear(out failure), "Native shortcut cleanup failed: " + failure);
+            Console.WriteLine("PASS: native RegisterHotKey collision, spare-ID rebind, original-key release, stale-message validation and cleanup on hidden task-owned windows; no physical keys injected.");
+        }
+        finally
+        {
+            first.TryClear(out _);
+            second.TryClear(out _);
+        }
     }
 
     private static void Render(Form form, string output)
@@ -362,6 +473,11 @@ internal static class Checks
     private sealed class PreviewProcessesWindow : ProcessExplorer
     {
         public PreviewProcessesWindow(VibranceGUI parent) : base(parent, initializeProcesses: false) { }
+        protected override bool ShowWithoutActivation => true;
+    }
+    private sealed class PreviewHotkeyDialog : HotkeyDialog
+    {
+        public PreviewHotkeyDialog(Keys current, Func<Keys, string> apply) : base(current, apply) { }
         protected override bool ShowWithoutActivation => true;
     }
 }

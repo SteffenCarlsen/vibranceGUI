@@ -19,9 +19,10 @@ namespace vibrance.GUI.common
         private const string AppName = "vibranceGUI";
         private const string TwitterLink = "https://twitter.com/juvlarN";
         private const string PaypalDonationLink = "https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=JDQFNKNNEW356";
-        private const int PauseHotkeyId = 1;
-        private bool _allowVisible = true, _loadingSettings = true, _settingsLoaded, _closing, _paused, _hotkeyRegistered, _runtimeInitialized;
-        private IntPtr _hotkeyWindow;
+        private bool _allowVisible = true, _loadingSettings = true, _settingsLoaded, _closing, _paused, _runtimeInitialized;
+        private readonly PauseHotkeyBinding _pauseHotkey = new();
+        private Keys _pauseHotkeyKeyData;
+        private HotkeyDialog _hotkeyDialog;
         private List<ApplicationSetting> _applicationSettings = new List<ApplicationSetting>();
         private readonly List<ResolutionModeWrapper> _supportedResolutionList = new List<ResolutionModeWrapper>();
         private readonly Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>> _windowsResolutionSettings = new Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>>();
@@ -35,6 +36,7 @@ namespace vibrance.GUI.common
             _defaultIngameValue = defaultIngameValue;
             _resolveLabelLevel = resolveLabelLevel;
             _initializeRuntime = initializeRuntime;
+            _pauseHotkeyKeyData = AppTheme.PauseHotkeyKeyData;
             InitializeComponent();
             trackBarWindowsLevel.Minimum = minTrackBarValue;
             trackBarWindowsLevel.Maximum = maxTrackBarValue;
@@ -42,6 +44,7 @@ namespace vibrance.GUI.common
             labelWindowsLevel.Text = _resolveLabelLevel(trackBarWindowsLevel.Value);
             comboBoxTheme.SelectedItem = AppTheme.Preference;
             checkBoxPauseHotkey.Checked = AppTheme.EnablePauseHotkey;
+            buttonPauseHotkey.Text = PauseHotkey.Format(_pauseHotkeyKeyData);
             foreach (Screen screen in Screen.AllScreens)
             {
                 if (ResolutionHelper.GetCurrentResolutionSettings(out Devmode mode, screen.DeviceName))
@@ -271,7 +274,7 @@ namespace vibrance.GUI.common
         }
         private void SaveAppearancePreferences()
         {
-            try { AppTheme.Save((ThemePreference)comboBoxTheme.SelectedItem, checkBoxPauseHotkey.Checked); }
+            try { AppTheme.Save((ThemePreference)comboBoxTheme.SelectedItem, checkBoxPauseHotkey.Checked, _pauseHotkeyKeyData); }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
             {
                 MessageBox.Show(this, ex.Message, "Appearance could not be saved", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -279,34 +282,59 @@ namespace vibrance.GUI.common
         }
         private void UpdatePauseHotkey()
         {
-            UnregisterPauseHotkey();
-            if (!checkBoxPauseHotkey.Checked || !_v.GetVibranceInfo().isInitialized) return;
-            // The HWND is borrowed from this form; unregister before its handle is destroyed.
-            IntPtr window = Handle;
-            if (RegisterHotKey(window, PauseHotkeyId, 0x0001 | 0x0002 | 0x4000, (uint)Keys.V) != 0)
+            if (!checkBoxPauseHotkey.Checked || !_v.GetVibranceInfo().isInitialized)
             {
-                _hotkeyWindow = window;
-                _hotkeyRegistered = true;
+                if (!_pauseHotkey.TryClear(out string error))
+                {
+                    _loadingSettings = true;
+                    checkBoxPauseHotkey.Checked = _pauseHotkey.IsRegistered;
+                    _loadingSettings = false;
+                    MessageBox.Show(this, error, "Pause shortcut unavailable", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
                 return;
             }
-            int error = Marshal.GetLastPInvokeError();
+            if (_pauseHotkey.TrySet(Handle, _pauseHotkeyKeyData, out string failure)) return;
             _loadingSettings = true;
-            checkBoxPauseHotkey.Checked = false;
+            checkBoxPauseHotkey.Checked = _pauseHotkey.IsRegistered;
             _loadingSettings = false;
-            MessageBox.Show(this, "Ctrl+Alt+V could not be registered. Another program may be using it.\n\n" + new Win32Exception(error).Message,
+            MessageBox.Show(this, failure,
                 "Pause shortcut unavailable", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
+
+        private void buttonPauseHotkey_Click(object sender, EventArgs e)
+        {
+            if (_closing) return;
+            using var dialog = new HotkeyDialog(_pauseHotkeyKeyData, ApplyPauseHotkey);
+            _hotkeyDialog = dialog;
+            try { dialog.ShowDialog(this); }
+            finally { _hotkeyDialog = null; }
+        }
+
+        internal string ApplyPauseHotkey(Keys keyData)
+        {
+            if (!PauseHotkey.IsValid(keyData)) return "Choose Ctrl, Alt or Shift with a key, or F1–F24. F12 is reserved by Windows.";
+            if (_closing) return "The application is closing.";
+            if (_initializeRuntime && checkBoxPauseHotkey.Checked && _v.GetVibranceInfo().isInitialized
+                && !_pauseHotkey.TrySet(Handle, keyData, out string error)) return error;
+            _pauseHotkeyKeyData = keyData;
+            buttonPauseHotkey.Text = PauseHotkey.Format(keyData);
+            if (!_initializeRuntime) return null;
+            try { AppTheme.Save((ThemePreference)comboBoxTheme.SelectedItem, checkBoxPauseHotkey.Checked, keyData); }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                return "The shortcut was applied for this session, but could not be saved.\n\n" + ex.Message;
+            }
+            return null;
+        }
+
         private void UnregisterPauseHotkey()
         {
-            if (!_hotkeyRegistered) return;
-            if (UnregisterHotKey(_hotkeyWindow, PauseHotkeyId) == 0)
-                Log("Could not unregister pause shortcut: " + new Win32Exception(Marshal.GetLastPInvokeError()).Message);
-            _hotkeyRegistered = false;
-            _hotkeyWindow = IntPtr.Zero;
+            if (!_pauseHotkey.TryClear(out string error)) Log(error);
         }
         protected override void OnHandleDestroyed(EventArgs e)
         {
             UnregisterPauseHotkey();
+            _pauseHotkey.DetachWindow();
             base.OnHandleDestroyed(e);
         }
         protected override void OnHandleCreated(EventArgs e)
@@ -321,13 +349,13 @@ namespace vibrance.GUI.common
         }
         protected override void WndProc(ref Message message)
         {
-            if (message.Msg == 0x0312 && message.WParam.ToInt32() == PauseHotkeyId) buttonPause_Click(this, EventArgs.Empty);
+            if (message.Msg == 0x0312 && !_closing && checkBoxPauseHotkey?.Checked == true && _pauseHotkey.Matches(message))
+            {
+                if (_hotkeyDialog is { IsDisposed: false }) _hotkeyDialog.CaptureShortcut(_pauseHotkey.KeyData);
+                else buttonPause_Click(this, EventArgs.Empty);
+            }
             base.WndProc(ref message);
         }
-        [LibraryImport("user32.dll", SetLastError = true)]
-        private static partial int RegisterHotKey(IntPtr window, int id, uint modifiers, uint key);
-        [LibraryImport("user32.dll", SetLastError = true)]
-        private static partial int UnregisterHotKey(IntPtr window, int id);
 
         private void buttonPause_Click(object sender, EventArgs e)
         {

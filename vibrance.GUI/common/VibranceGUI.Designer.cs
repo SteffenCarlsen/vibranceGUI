@@ -15,7 +15,7 @@ namespace vibrance.GUI.common
         private TrackBar trackBarWindowsLevel;
         private Label labelWindowsLevel, statusLabel, labelThemeStatus;
         private ComboBox comboBoxTheme;
-        private Button buttonPause, buttonAddProgram, buttonProcessExplorer, buttonEditProgram, buttonRemoveProgram;
+        private Button buttonPause, buttonPauseHotkey, buttonAddProgram, buttonProcessExplorer, buttonEditProgram, buttonRemoveProgram;
         private ListView listApplications;
         private ToolTip toolTip;
         private Timer settingsSaveTimer;
@@ -127,9 +127,14 @@ namespace vibrance.GUI.common
             foreach (ThemePreference preference in Enum.GetValues<ThemePreference>()) comboBoxTheme.Items.Add(preference);
             comboBoxTheme.SelectedIndexChanged += comboBoxTheme_SelectedIndexChanged;
             appearance.Controls.Add(comboBoxTheme);
-            checkBoxPauseHotkey = new CheckBox { Text = "Ctrl+Alt+V to pause / resume", AutoSize = true, Margin = new Padding(0, 5, 0, 8) };
+            checkBoxPauseHotkey = new CheckBox { Text = "Enable pause hotkey", AutoSize = true, Margin = new Padding(0, 5, 12, 8) };
             checkBoxPauseHotkey.CheckedChanged += checkBoxPauseHotkey_CheckedChanged;
             appearance.Controls.Add(checkBoxPauseHotkey);
+            buttonPauseHotkey = AppTheme.Button(PauseHotkey.Format(AppTheme.PauseHotkeyKeyData), buttonPauseHotkey_Click);
+            buttonPauseHotkey.Name = "buttonPauseHotkey";
+            buttonPauseHotkey.AccessibleName = "Change pause hotkey";
+            buttonPauseHotkey.Margin = new Padding(0, 0, 0, 8);
+            appearance.Controls.Add(buttonPauseHotkey);
             settingsLayout.Controls.Add(appearance);
             labelThemeStatus = new Label { Text = "Appearance changes apply immediately.", AutoSize = true, Margin = new Padding(0, 0, 0, 2) };
             settingsLayout.Controls.Add(labelThemeStatus);

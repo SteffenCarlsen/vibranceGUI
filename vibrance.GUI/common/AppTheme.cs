@@ -20,11 +20,12 @@ namespace vibrance.GUI.common
 
     internal static partial class AppTheme
     {
-        private sealed class Preferences
+        internal sealed class Preferences
         {
             public Preferences() { }
             public ThemePreference Theme { get; set; }
             public bool EnablePauseHotkey { get; set; }
+            public Keys PauseHotkeyKeyData { get; set; } = PauseHotkey.Default;
         }
 
         private static Preferences _preferences = new Preferences();
@@ -37,6 +38,7 @@ namespace vibrance.GUI.common
 
         public static ThemePreference Preference => _preferences.Theme;
         public static bool EnablePauseHotkey => _preferences.EnablePauseHotkey;
+        public static Keys PauseHotkeyKeyData => _preferences.PauseHotkeyKeyData;
         public static Color LinkColor => !SystemInformation.HighContrast && SystemColors.Control.GetBrightness() < 0.5f
             ? Color.FromArgb(113, 184, 255) : SystemColors.HotTrack;
         public static Color SuccessColor => SystemInformation.HighContrast
@@ -47,21 +49,28 @@ namespace vibrance.GUI.common
         // Call before creating any window. Native controls and dialogs then share the theme.
         public static void Initialize()
         {
+            _preferences = ReadPreferences(PreferencesPath);
+            Initialize(_preferences.Theme);
+        }
+
+        internal static Preferences ReadPreferences(string path)
+        {
+            var preferences = new Preferences();
             try
             {
-                if (File.Exists(PreferencesPath))
+                if (File.Exists(path))
                 {
-                    _preferences = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(PreferencesPath))
+                    preferences = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(path))
                         ?? new Preferences();
-                    if (!Enum.IsDefined(_preferences.Theme))
-                        _preferences.Theme = ThemePreference.System;
+                    if (!Enum.IsDefined(preferences.Theme)) preferences.Theme = ThemePreference.System;
+                    if (!PauseHotkey.IsValid(preferences.PauseHotkeyKeyData)) preferences.PauseHotkeyKeyData = PauseHotkey.Default;
                 }
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is JsonException)
             {
-                _preferences = new Preferences();
+                preferences = new Preferences();
             }
-            Initialize(_preferences.Theme);
+            return preferences;
         }
 
         public static void Initialize(ThemePreference preference)
@@ -243,13 +252,17 @@ namespace vibrance.GUI.common
         [LibraryImport("dwmapi.dll")]
         private static partial int DwmSetWindowAttribute(IntPtr window, uint attribute, ref int value, uint size);
 
-        public static void Save(ThemePreference preference, bool enablePauseHotkey)
+        public static void Save(ThemePreference preference, bool enablePauseHotkey, Keys keyData) =>
+            Save(preference, enablePauseHotkey, keyData, PreferencesPath);
+
+        internal static void Save(ThemePreference preference, bool enablePauseHotkey, Keys keyData, string path)
         {
-            var preferences = new Preferences { Theme = preference, EnablePauseHotkey = enablePauseHotkey };
-            Directory.CreateDirectory(Path.GetDirectoryName(PreferencesPath));
-            string temporaryPath = PreferencesPath + ".tmp";
+            if (!PauseHotkey.IsValid(keyData)) throw new ArgumentException("Invalid pause shortcut.", nameof(keyData));
+            var preferences = new Preferences { Theme = preference, EnablePauseHotkey = enablePauseHotkey, PauseHotkeyKeyData = keyData };
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)));
+            string temporaryPath = path + ".tmp";
             File.WriteAllText(temporaryPath, JsonSerializer.Serialize(preferences));
-            File.Move(temporaryPath, PreferencesPath, true);
+            File.Move(temporaryPath, path, true);
             _preferences = preferences;
         }
 
