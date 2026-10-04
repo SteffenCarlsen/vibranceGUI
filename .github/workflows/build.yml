@@ -1,0 +1,29 @@
+name: Build and verify
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build
+        run: dotnet build vibrance.GUI.sln -c Release
+      - name: Regression checks
+        run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release
+      - name: Publish portable executable
+        shell: pwsh
+        run: ./scripts/publish.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vibranceGUI-win-x64
+          path: artifacts/win-x64/vibrance.GUI.exe
+          if-no-files-found: error
