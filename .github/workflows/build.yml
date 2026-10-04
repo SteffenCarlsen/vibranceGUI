@@ -1,0 +1,81 @@
+name: Build, verify and release
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build
+        run: dotnet build vibrance.GUI.sln -c Release
+      - name: Regression checks
+        run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release
+      - name: Live theme switching checks
+        run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --theme-switch artifacts/theme-switch
+      - name: Windows system appearance startup
+        run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --render System artifacts/system-theme/startup.png
+      - name: Shortcut editor checks
+        run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --hotkey-ui artifacts/hotkey-ui
+      - name: Native dropdown contrast checks
+        run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --dropdowns artifacts/dropdowns
+      - name: Publish portable executable
+        shell: pwsh
+        run: ./scripts/publish.ps1
+      - name: Verify portable startup without changing displays
+        shell: pwsh
+        run: |
+          & ./artifacts/win-x64/vibrance.GUI.exe --diagnostics artifacts/win-x64/gpu-diagnostics.json | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Published executable failed its read-only startup check.' }
+          $report = Get-Content -LiteralPath artifacts/win-x64/gpu-diagnostics.json -Raw | ConvertFrom-Json
+          if (-not $report.ReadOnly -or $report.ProcessArchitecture -ne 'X64') { throw 'Unexpected portable startup report.' }
+      - name: Read application version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (& dotnet msbuild vibrance.GUI/vibrance.GUI.csproj -getProperty:Version -nologo | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^[0-9A-Za-z][0-9A-Za-z.+-]*$') { throw 'Could not read the application version.' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vibranceGUI-win-x64
+          path: artifacts/win-x64/vibrance.GUI.exe
+          if-no-files-found: error
+  release:
+    name: Publish master release
+    needs: windows
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && !github.event.deleted && github.repository == 'SteffenCarlsen/vibranceGUI'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: master-release
+      queue: max
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: vibranceGUI-win-x64
+          path: artifacts/verified-release
+      - name: Publish verified executable and commit changelog
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.windows.outputs.version }}
+        run: ./scripts/release.ps1 -Repository $env:GITHUB_REPOSITORY -Commit $env:GITHUB_SHA -Version $env:RELEASE_VERSION -ArtifactDirectory artifacts/verified-release

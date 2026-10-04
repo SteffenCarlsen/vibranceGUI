@@ -1,191 +1,144 @@
-﻿using System;
-using System.Collections;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
 using vibrance.GUI.NVIDIA;
 
 namespace vibrance.GUI.common
 {
-
-    class SettingsController : ISettingsController
+    internal sealed class SettingsController : ISettingsController
     {
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-        static extern uint GetPrivateProfileString(
-           string lpAppName,
-           string lpKeyName,
-           string lpDefault,
-           StringBuilder lpReturnedString,
-           uint nSize,
-           string lpFileName);
+        [DllImport("kernel32.dll", EntryPoint = "GetPrivateProfileStringW", CharSet = CharSet.Unicode)]
+        private static extern uint ReadIni(string section, string key, string defaultValue,
+            [Out] char[] value, uint size, string fileName);
 
+        [DllImport("kernel32.dll", EntryPoint = "WritePrivateProfileStringW", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool WriteIni(string section, string key, string value, string fileName);
 
-        [DllImport("kernel32.dll", EntryPoint = "WritePrivateProfileString")]
-        private static extern bool WritePrivateProfileString(string lpAppName,
-          string lpKeyName, string lpString, string lpFileName);
+        private static readonly object SaveLock = new object();
+        private const string Section = "Settings";
+        private readonly string _directory;
+        private readonly string _fileName;
+        private readonly string _applicationFile;
+        public string LastError { get; private set; }
 
-        const string SzSectionName = "Settings";
-        const string SzKeyNameInactive = "inactiveValue";
-        const string SzKeyNameRefreshRate = "refreshRate";
-        const string SzKeyNameAffectPrimaryMonitorOnly = "affectPrimaryMonitorOnly";
-        const string SzKeyNameNeverSwitchResolution = "neverSwitchResolution";
+        public SettingsController() : this(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "vibranceGUI")) { }
 
-        private string _fileName = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData).ToString() + "\\vibranceGUI\\vibranceGUI.ini";
-        private string _fileNameApplicationSettings = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData).ToString() + "\\vibranceGUI\\applicationData.xml";
-
-
-        public bool SetVibranceSettings(string windowsLevel, string affectPrimaryMonitorOnly, string neverSwitchResolution, List<ApplicationSetting> applicationSettings)
+        internal SettingsController(string directory)
         {
-            if (!PrepareFile())
-            {
-                return false;
-            }
-
-            WritePrivateProfileString(SzSectionName, SzKeyNameInactive, windowsLevel, _fileName);
-            WritePrivateProfileString(SzSectionName, SzKeyNameAffectPrimaryMonitorOnly, affectPrimaryMonitorOnly, _fileName);
-            WritePrivateProfileString(SzSectionName, SzKeyNameNeverSwitchResolution, neverSwitchResolution, _fileName);
-
-            try
-            {
-                var writer = System.Xml.XmlWriter.Create(_fileNameApplicationSettings);
-                if (writer.WriteState != WriteState.Start)
-                    return false;
-                XmlSerializer serializer = new XmlSerializer(typeof(List<ApplicationSetting>));
-                serializer.Serialize(writer, applicationSettings);
-                writer.Flush();
-                writer.Close();
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-
-            return (Marshal.GetLastWin32Error() == 0);
+            _directory = Path.GetFullPath(directory);
+            _fileName = Path.Combine(_directory, "vibranceGUI.ini");
+            _applicationFile = Path.Combine(_directory, "applicationData.xml");
         }
 
-        public bool SetVibranceSetting(string szKeyName, string value)
+        public bool SetVibranceSettings(string windowsLevel, string affectPrimaryMonitorOnly,
+            string neverSwitchResolution, List<ApplicationSetting> applicationSettings)
         {
-            if (!PrepareFile())
+            lock (SaveLock)
             {
-                return false;
-            }
-
-            WritePrivateProfileString(SzSectionName, szKeyName, value.ToString(), _fileName);
-
-            return (Marshal.GetLastWin32Error() == 0);
-        }
-
-        private bool PrepareFile()
-        {
-            if (!IsFileExisting(_fileName))
-            {
-                StreamWriter sw = new StreamWriter(_fileName);
-                sw.Close();
-                if (!IsFileExisting(_fileName))
+                string temporaryFile = _applicationFile + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
                 {
+                    LastError = null;
+                    Directory.CreateDirectory(_directory);
+                    // Serialize completely before replacing the last readable profile file.
+                    using (var writer = XmlWriter.Create(temporaryFile, new XmlWriterSettings { Indent = true }))
+                        new XmlSerializer(typeof(List<ApplicationSetting>)).Serialize(writer,
+                            applicationSettings ?? new List<ApplicationSetting>());
+                    if (File.Exists(_applicationFile))
+                        File.Replace(temporaryFile, _applicationFile, _applicationFile + ".bak");
+                    else
+                        File.Move(temporaryFile, _applicationFile);
+                    bool saved = WriteIni(Section, "inactiveValue", windowsLevel, _fileName)
+                        & WriteIni(Section, "affectPrimaryMonitorOnly", affectPrimaryMonitorOnly, _fileName)
+                        & WriteIni(Section, "neverSwitchResolution", neverSwitchResolution, _fileName);
+                    if (!saved) LastError = "Windows could not write the desktop settings file.";
+                    return saved;
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidOperationException)
+                {
+                    LastError = ex.Message;
                     return false;
                 }
-            }
-
-            return true;
-        }
-
-        public void ReadVibranceSettings(GraphicsAdapter graphicsAdapter, out int vibranceWindowsLevel, out bool affectPrimaryMonitorOnly, out bool neverSwitchResolution, out List<ApplicationSetting> applicationSettings)
-        {
-            int defaultLevel = 0; 
-            int maxLevel = 0;
-            if (graphicsAdapter == GraphicsAdapter.Nvidia)
-            {
-                defaultLevel = NvidiaDynamicVibranceProxy.NvapiDefaultLevel;
-                maxLevel = NvidiaDynamicVibranceProxy.NvapiMaxLevel;
-            }
-            if (graphicsAdapter == GraphicsAdapter.Amd)
-            {
-                // todo
-                defaultLevel = 100;
-                maxLevel = 300;
-            }
-
-            if (!IsFileExisting(_fileName) || !IsFileExisting(_fileNameApplicationSettings))
-            {
-                vibranceWindowsLevel = defaultLevel;
-                affectPrimaryMonitorOnly = false;
-                applicationSettings = new List<ApplicationSetting>();
-                neverSwitchResolution = false;
-                return;
-            }
-
-            string szDefault = "";
-
-            StringBuilder szValueInactive = new StringBuilder(1024);
-            GetPrivateProfileString(SzSectionName,
-                SzKeyNameInactive,
-                szDefault,
-                szValueInactive,
-                Convert.ToUInt32(szValueInactive.Capacity),
-                _fileName);
-
-            StringBuilder szValueRefreshRate = new StringBuilder(1024);
-            GetPrivateProfileString(SzSectionName,
-                SzKeyNameRefreshRate,
-                szDefault,
-                szValueRefreshRate,
-                Convert.ToUInt32(szValueRefreshRate.Capacity),
-                _fileName);
-
-            StringBuilder szValueAffectPrimaryMonitorOnly = new StringBuilder(1024);
-            GetPrivateProfileString(SzSectionName,
-                SzKeyNameAffectPrimaryMonitorOnly,
-                "false",
-                szValueAffectPrimaryMonitorOnly,
-                Convert.ToUInt32(szValueAffectPrimaryMonitorOnly.Capacity),
-                _fileName);
-
-            StringBuilder szValueNeverSwitchResolution = new StringBuilder(1024);
-            GetPrivateProfileString(SzSectionName,
-                SzKeyNameNeverSwitchResolution,
-                "false",
-                szValueNeverSwitchResolution,
-                Convert.ToUInt32(szValueNeverSwitchResolution.Capacity),
-                _fileName);
-
-            try
-            {
-                vibranceWindowsLevel = int.Parse(szValueInactive.ToString());
-                affectPrimaryMonitorOnly = bool.Parse(szValueAffectPrimaryMonitorOnly.ToString());
-                neverSwitchResolution = bool.Parse(szValueNeverSwitchResolution.ToString());
-            }
-            catch (Exception)
-            {
-                vibranceWindowsLevel = defaultLevel;
-                affectPrimaryMonitorOnly = false;
-                applicationSettings = new List<ApplicationSetting>();
-                neverSwitchResolution = false;
-                return;
-            }
-
-            if (vibranceWindowsLevel < defaultLevel || vibranceWindowsLevel > maxLevel)
-                vibranceWindowsLevel = defaultLevel;
-
-            try
-            {
-                var reader = System.Xml.XmlReader.Create(_fileNameApplicationSettings);
-                XmlSerializer serializer = new XmlSerializer(typeof(List<ApplicationSetting>));
-                applicationSettings = (List<ApplicationSetting>)serializer.Deserialize(reader);
-                reader.Close();
-            }
-            catch (Exception)
-            {
-                applicationSettings = new List<ApplicationSetting>();
+                finally
+                {
+                    try { if (File.Exists(temporaryFile)) File.Delete(temporaryFile); }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
             }
         }
 
-        private bool IsFileExisting(string szFilename)
+        public bool SetVibranceSetting(string key, string value)
         {
-            return File.Exists(szFilename);
+            lock (SaveLock)
+            {
+                try
+                {
+                    Directory.CreateDirectory(_directory);
+                    return WriteIni(Section, key, value, _fileName);
+                }
+                catch (IOException) { return false; }
+                catch (UnauthorizedAccessException) { return false; }
+            }
+        }
+
+        public bool BackupUnreadableProfiles()
+        {
+            try
+            {
+                if (File.Exists(_applicationFile))
+                    File.Copy(_applicationFile, _applicationFile + "." + Guid.NewGuid().ToString("N") + ".corrupt");
+                return true;
+            }
+            catch (IOException ex) { LastError = ex.Message; return false; }
+            catch (UnauthorizedAccessException ex) { LastError = ex.Message; return false; }
+        }
+
+        private string ReadValue(string key, string defaultValue)
+        {
+            var buffer = new char[64];
+            int length = (int)ReadIni(Section, key, defaultValue, buffer, (uint)buffer.Length, _fileName);
+            return new string(buffer, 0, length);
+        }
+
+        public void ReadVibranceSettings(GraphicsAdapter graphicsAdapter, out int vibranceWindowsLevel,
+            out bool affectPrimaryMonitorOnly, out bool neverSwitchResolution,
+            out List<ApplicationSetting> applicationSettings)
+        {
+            int defaultLevel = graphicsAdapter == GraphicsAdapter.Amd ? 100 : NvidiaDynamicVibranceProxy.NvapiDefaultLevel;
+            int maximum = graphicsAdapter == GraphicsAdapter.Amd ? 300 : NvidiaDynamicVibranceProxy.NvapiMaxLevel;
+            vibranceWindowsLevel = int.TryParse(ReadValue("inactiveValue", defaultLevel.ToString()), out int level)
+                && level >= 0 && level <= maximum ? level : defaultLevel;
+            affectPrimaryMonitorOnly = bool.TryParse(ReadValue("affectPrimaryMonitorOnly", "false"), out bool primary) && primary;
+            neverSwitchResolution = bool.TryParse(ReadValue("neverSwitchResolution", "false"), out bool never) && never;
+            applicationSettings = new List<ApplicationSetting>();
+            LastError = null;
+            if (!File.Exists(_applicationFile)) return;
+            try
+            {
+                using var reader = XmlReader.Create(_applicationFile,
+                    new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+                var profiles = (List<ApplicationSetting>)new XmlSerializer(typeof(List<ApplicationSetting>)).Deserialize(reader);
+                applicationSettings = (profiles ?? new List<ApplicationSetting>())
+                    .Where(profile => profile != null && !string.IsNullOrWhiteSpace(profile.FileName))
+                    .GroupBy(profile => profile.FileName, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.First()).ToList();
+                foreach (var profile in applicationSettings)
+                {
+                    profile.IngameLevel = Math.Clamp(profile.IngameLevel, 0, maximum);
+                    if (profile.ResolutionSettings == null) profile.IsResolutionChangeNeeded = false;
+                }
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is InvalidOperationException || ex is XmlException)
+            {
+                LastError = "Could not read applicationData.xml: " + ex.Message;
+            }
         }
     }
 }

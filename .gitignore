@@ -398,3 +398,5 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+# Local portable builds, diagnostics and UI evidence.
+artifacts/

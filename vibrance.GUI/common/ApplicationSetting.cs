@@ -30,12 +30,12 @@ namespace vibrance.GUI.common
                 return false;
 
             ApplicationSetting that = (ApplicationSetting)obj;
-            return this.FileName.Equals(that.FileName);
+            return StringComparer.OrdinalIgnoreCase.Equals(this.FileName, that.FileName);
         }
 
         public override int GetHashCode()
         {
-            return this.FileName.GetHashCode();
+            return FileName == null ? 0 : StringComparer.OrdinalIgnoreCase.GetHashCode(FileName);
         }
     }
 }

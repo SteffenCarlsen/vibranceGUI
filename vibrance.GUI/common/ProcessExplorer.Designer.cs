@@ -1,92 +1,76 @@
-﻿namespace vibrance.GUI.common
+using System.ComponentModel;
+using System.Drawing;
+using System.Windows.Forms;
+
+namespace vibrance.GUI.common
 {
     partial class ProcessExplorer
     {
-        /// <summary>
-        /// Required designer variable.
-        /// </summary>
-        private System.ComponentModel.IContainer components = null;
+        private IContainer components;
+        private ListView listView;
+        private ImageList iconList;
+        private Button button, buttonAdd;
+        private Label labelStatus;
 
-        /// <summary>
-        /// Clean up any resources being used.
-        /// </summary>
-        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
-            if (disposing && (components != null))
+            if (disposing)
             {
-                components.Dispose();
+                _closing = true;
+                _reloadCancellation?.Cancel();
+                ClearProcessEntries();
+                components?.Dispose();
             }
             base.Dispose(disposing);
         }
-
-        #region Windows Form Designer generated code
-
-        /// <summary>
-        /// Required method for Designer support - do not modify
-        /// the contents of this method with the code editor.
-        /// </summary>
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ProcessExplorer));
-            this.listView = new System.Windows.Forms.ListView();
-            this.iconList = new System.Windows.Forms.ImageList(this.components);
-            this.button = new System.Windows.Forms.Button();
-            this.backgroundWorker = new System.ComponentModel.BackgroundWorker();
-            this.SuspendLayout();
-            // 
-            // listView
-            // 
-            this.listView.Location = new System.Drawing.Point(12, 41);
-            this.listView.Name = "listView";
-            this.listView.Size = new System.Drawing.Size(615, 236);
-            this.listView.TabIndex = 0;
-            this.listView.UseCompatibleStateImageBehavior = false;
-            this.listView.DoubleClick += new System.EventHandler(this.listView_DoubleClick);
-            // 
-            // iconList
-            // 
-            this.iconList.ColorDepth = System.Windows.Forms.ColorDepth.Depth32Bit;
-            this.iconList.ImageSize = new System.Drawing.Size(16, 16);
-            this.iconList.TransparentColor = System.Drawing.Color.Transparent;
-            // 
-            // button
-            // 
-            this.button.Location = new System.Drawing.Point(13, 12);
-            this.button.Name = "button";
-            this.button.Size = new System.Drawing.Size(119, 23);
-            this.button.TabIndex = 1;
-            this.button.Text = "Reload Processes";
-            this.button.UseVisualStyleBackColor = true;
-            this.button.Click += new System.EventHandler(this.button_Click);
-            // 
-            // backgroundWorker
-            // 
-            this.backgroundWorker.DoWork += new System.ComponentModel.DoWorkEventHandler(this.backgroundWorker_DoWork);
-            this.backgroundWorker.ProgressChanged += new System.ComponentModel.ProgressChangedEventHandler(this.backgroundWorker_ProgressChanged);
-            // 
-            // ProcessExplorer
-            // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(639, 289);
-            this.Controls.Add(this.button);
-            this.Controls.Add(this.listView);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
-            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.Name = "ProcessExplorer";
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "vibranceGUI Process Explorer";
-            this.ResumeLayout(false);
-
+            components = new Container();
+            var resources = new ComponentResourceManager(typeof(ProcessExplorer));
+            AppTheme.Configure(this);
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            ClientSize = new Size(740, 420);
+            MinimumSize = new Size(580, 360);
+            StartPosition = FormStartPosition.CenterParent;
+            Icon = (Icon)resources.GetObject("$this.Icon");
+            Text = "vibranceGUI Process Explorer";
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(16) };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var header = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 2, Margin = new Padding(0, 0, 0, 12) };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            header.Controls.Add(new Label { Text = "Add a running program", AutoSize = true, Font = new Font("Segoe UI", 14F, FontStyle.Bold), Anchor = AnchorStyles.Left, Margin = Padding.Empty }, 0, 0);
+            button = AppTheme.Button("Reload Processes", button_Click);
+            header.Controls.Add(button, 1, 0);
+            layout.Controls.Add(header, 0, 0);
+            iconList = new ImageList(components) { ImageSize = new Size(24, 24), ColorDepth = ColorDepth.Depth32Bit };
+            listView = new ListView
+            {
+                Dock = DockStyle.Fill, View = View.Details, SmallImageList = iconList, FullRowSelect = true,
+                HideSelection = false, MultiSelect = false, HeaderStyle = ColumnHeaderStyle.Nonclickable,
+                BackColor = SystemColors.Window, ForeColor = SystemColors.WindowText, AccessibleName = "Running programs", Margin = new Padding(0, 0, 0, 12)
+            };
+            listView.Columns.Add("Programs", 210);
+            listView.Columns.Add("Full Path", 470);
+            listView.DoubleClick += listView_DoubleClick;
+            listView.SelectedIndexChanged += (sender, args) => buttonAdd.Enabled = listView.SelectedItems.Count == 1;
+            listView.KeyDown += (sender, args) => { if (args.KeyCode == Keys.Enter) { listView_DoubleClick(sender, args); args.Handled = true; } };
+            layout.Controls.Add(listView, 0, 1);
+            var footer = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            labelStatus = new Label { Text = "Loading processes...", AutoSize = true, Anchor = AnchorStyles.Left, Margin = Padding.Empty };
+            footer.Controls.Add(labelStatus, 0, 0);
+            buttonAdd = AppTheme.Button("Add", listView_DoubleClick, primary: true);
+            buttonAdd.Enabled = false;
+            footer.Controls.Add(buttonAdd, 1, 0);
+            layout.Controls.Add(footer, 0, 2);
+            Controls.Add(layout);
+            AcceptButton = buttonAdd;
         }
-
-        #endregion
-
-        private System.Windows.Forms.ListView listView;
-        private System.Windows.Forms.ImageList iconList;
-        private System.Windows.Forms.Button button;
-        private System.ComponentModel.BackgroundWorker backgroundWorker;
     }
 }

@@ -1,65 +1,61 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using vibrance.GUI.AMD.vendor;
-using vibrance.GUI.AMD.vendor.adl32;
 using vibrance.GUI.NVIDIA;
 
 namespace vibrance.GUI.common
 {
-    public enum GraphicsAdapter
+    public enum GraphicsAdapter { Unknown = 0, Nvidia = 1, Amd = 2, Ambiguous = 3 }
+
+    public static class GraphicsAdapterHelper
     {
-        Unknown = 0,
-        Nvidia = 1,
-        Amd = 2,
-        Ambiguous = 3
-    }
-
-    public class GraphicsAdapterHelper
-    {
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr LoadLibrary(string dllToLoad);
-
-        private const string _nvidiaDllName = "nvapi.dll";
-        private static readonly string _amdDllName = Environment.Is64BitOperatingSystem 
-            ? AMD.vendor.adl64.AdlImport.AtiadlFileName
-            : AMD.vendor.adl32.AdlImport.AtiadlFileName;
-
+        public static string LastError { get; private set; } = string.Empty;
 
         public static GraphicsAdapter GetAdapter()
         {
-            string windowsFolder = Environment.GetFolderPath(Environment.SpecialFolder.SystemX86);
-            if (File.Exists(Path.Combine(windowsFolder, _amdDllName)) && 
-                File.Exists(Path.Combine(windowsFolder, _nvidiaDllName)))
+            // Installed libraries are not evidence of a GPU driving a supported display.
+            // A Ryzen iGPU driver may coexist with a discrete NVIDIA GPU.
+            using (var nvidia = new NvidiaDisplayBackend())
             {
-                return GraphicsAdapter.Ambiguous;
+                if (nvidia.DisplayNames.Count > 0) return GraphicsAdapter.Nvidia;
+                LastError = nvidia.InitializationError;
             }
-            if (IsAdapterAvailable(_amdDllName))
+            using (var amd = new AmdAdapter())
             {
-                IAmdAdapter amdAdapter = Environment.Is64BitOperatingSystem ? (IAmdAdapter)new AmdAdapter64() :new AmdAdapter32();
-                if (amdAdapter.IsAvailable())
-                {
-                    return GraphicsAdapter.Amd;
-                }
-            }
-            if (IsAdapterAvailable(_nvidiaDllName))
-            {
-                return GraphicsAdapter.Nvidia;
+                amd.Init();
+                if (amd.DisplayNames.Count > 0) return GraphicsAdapter.Amd;
+                LastError += Environment.NewLine + amd.InitializationError;
             }
             return GraphicsAdapter.Unknown;
         }
+    }
 
-        private static bool IsAdapterAvailable(string dllName)
+    public interface IDisplayVibranceBackend : IDisposable
+    {
+        IReadOnlyList<string> DisplayNames { get; }
+        string GpuName { get; }
+        string InitializationError { get; }
+        bool SetLevel(string deviceName, int level);
+        void InvalidateCache() { }
+    }
+
+    internal sealed class DriverLibrary : SafeHandleZeroOrMinusOneIsInvalid
+    {
+        private DriverLibrary(IntPtr handle) : base(true) { SetHandle(handle); }
+
+        public static DriverLibrary Load(string fileName) =>
+            new DriverLibrary(NativeLibrary.Load(Path.Combine(Environment.SystemDirectory, fileName)));
+
+        public T GetExport<T>(string name) where T : Delegate =>
+            Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(handle, name));
+
+        protected override bool ReleaseHandle()
         {
-            try
-            {
-                return LoadLibrary(dllName) != IntPtr.Zero;
-            }
-            catch (Exception)
-            {
-                return false;
-            }    
+            NativeLibrary.Free(handle);
+            return true;
         }
     }
 }

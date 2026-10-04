@@ -37,7 +37,8 @@ namespace vibrance.GUI.NVIDIA
         {
             if (_settingsList == null)
                 _settingsList = GenerateSettingsWrapper();
-            NvidiaVibranceValueWrapper returnWrapper = _settingsList.Find(x => x.Value == value) ?? Find(value + 1);
+            int bounded = System.Math.Clamp(value, 0, 63);
+            NvidiaVibranceValueWrapper returnWrapper = _settingsList.Find(x => x.Value >= bounded);
 
             return returnWrapper;
         }
