@@ -30,20 +30,20 @@ namespace vibrance.GUI.common
             AppTheme.Configure(this);
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(780, 460);
+            ClientSize = new Size(740, 420);
             MinimumSize = new Size(580, 360);
             StartPosition = FormStartPosition.CenterParent;
             Icon = (Icon)resources.GetObject("$this.Icon");
             Text = "vibranceGUI Process Explorer";
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(24) };
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(16) };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            var header = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 2, Margin = new Padding(0, 0, 0, 16) };
+            var header = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, ColumnCount = 2, Margin = new Padding(0, 0, 0, 12) };
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            header.Controls.Add(new Label { Text = "Add a running program", AutoSize = true, Font = new Font("Segoe UI", 18F, FontStyle.Bold), Margin = Padding.Empty }, 0, 0);
+            header.Controls.Add(new Label { Text = "Add a running program", AutoSize = true, Font = new Font("Segoe UI", 14F, FontStyle.Bold), Anchor = AnchorStyles.Left, Margin = Padding.Empty }, 0, 0);
             button = AppTheme.Button("Reload Processes", button_Click);
             header.Controls.Add(button, 1, 0);
             layout.Controls.Add(header, 0, 0);
@@ -52,7 +52,7 @@ namespace vibrance.GUI.common
             {
                 Dock = DockStyle.Fill, View = View.Details, SmallImageList = iconList, FullRowSelect = true,
                 HideSelection = false, MultiSelect = false, HeaderStyle = ColumnHeaderStyle.Nonclickable,
-                BackColor = SystemColors.Window, ForeColor = SystemColors.WindowText, AccessibleName = "Running programs", Margin = new Padding(0, 0, 0, 16)
+                BackColor = SystemColors.Window, ForeColor = SystemColors.WindowText, AccessibleName = "Running programs", Margin = new Padding(0, 0, 0, 12)
             };
             listView.Columns.Add("Programs", 210);
             listView.Columns.Add("Full Path", 470);
@@ -65,7 +65,7 @@ namespace vibrance.GUI.common
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             labelStatus = new Label { Text = "Loading processes...", AutoSize = true, Anchor = AnchorStyles.Left, Margin = Padding.Empty };
             footer.Controls.Add(labelStatus, 0, 0);
-            buttonAdd = AppTheme.Button("Add", listView_DoubleClick);
+            buttonAdd = AppTheme.Button("Add", listView_DoubleClick, primary: true);
             buttonAdd.Enabled = false;
             footer.Controls.Add(buttonAdd, 1, 0);
             layout.Controls.Add(footer, 0, 2);

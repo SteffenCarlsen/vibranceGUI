@@ -123,11 +123,15 @@ internal static class Checks
             var field = (TextBox)dialog.Controls.Find("textBoxHotkey", true).Single();
             var save = (Button)dialog.Controls.Find("buttonSave", true).Single();
             var feedback = (Label)dialog.Controls.Find("labelHotkeyStatus", true).Single();
+            Assert(string.IsNullOrEmpty(feedback.Text), "A fresh shortcut editor displayed stale feedback.");
+            CheckHotkeyWidths(dialog, Path.Combine(outputDirectory, theme + "-compact-startup"), compact: true);
             var capture = field.GetType().GetMethod("ProcessCmdKey", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
             object[] input = { Message.Create(field.Handle, 0x100, IntPtr.Zero, IntPtr.Zero), Keys.Control | Keys.Shift | Keys.P };
             Assert((bool)capture.Invoke(field, input)!, "The shortcut field did not consume a shortcut keydown.");
             Assert(dialog.KeyData == (Keys.Control | Keys.Shift | Keys.P) && field.Text == "Ctrl+Shift+P",
                 "The actual shortcut input path did not record/display the selected chord.");
+            Assert(string.IsNullOrEmpty(feedback.Text), "A valid captured shortcut retained feedback.");
+            CheckHotkeyWidths(dialog, Path.Combine(outputDirectory, theme + "-compact-valid"), compact: true);
             dialog.CaptureShortcut(Keys.ControlKey | Keys.Control);
             dialog.CaptureShortcut(Keys.F12);
             Assert(dialog.KeyData == (Keys.Control | Keys.Shift | Keys.P), "Invalid input replaced the last valid shortcut.");
@@ -136,8 +140,9 @@ internal static class Checks
             Assert(attempts == 1 && dialog.Visible && dialog.DialogResult != DialogResult.OK && shortcut.Text == originalLabel,
                 "A collision closed the editor or changed the current shortcut.");
             CaptureWindow(dialog, Path.Combine(outputDirectory, theme + "-collision.png"));
-            Assert(feedback.Bottom <= save.Parent!.Top && save.RectangleToScreen(save.ClientRectangle).Bottom <= dialog.RectangleToScreen(dialog.ClientRectangle).Bottom,
-                "Shortcut feedback or Save button is clipped.");
+            CheckHotkeyWidths(dialog, Path.Combine(outputDirectory, theme + "-collision-layout"), compact: false);
+            Assert(dialog.KeyData == (Keys.Control | Keys.Shift | Keys.P) && shortcut.Text == originalLabel && attempts == 1,
+                "Resizing collision feedback changed the candidate/current shortcut or retried its registration.");
             collision = false;
             save.PerformClick();
             Application.DoEvents();
@@ -148,15 +153,160 @@ internal static class Checks
             Application.DoEvents();
             cancel.CaptureShortcut(Keys.F8);
             CaptureWindow(cancel, Path.Combine(outputDirectory, theme + "-capture.png"));
+            CheckHotkeyWidths(cancel, Path.Combine(outputDirectory, theme + "-compact-cancel"), compact: true);
             ((Button)cancel.Controls.Find("buttonCancel", true).Single()).PerformClick();
             Assert(cancel.DialogResult != DialogResult.OK && shortcut.Text == "Ctrl+Shift+P", "Cancel applied an unsaved candidate.");
+
+            // Simulate the actual partial-success contract: the session chord changes,
+            // persistence fails, and the editor remains open to show the complete error.
+            const string saveFailure = "The shortcut was applied for this session, but could not be saved.\n\n"
+                + "Access to the path 'C:\\Users\\Example\\AppData\\Local\\vibranceGUI\\appearance.json' is denied.\n\n"
+                + "The current shortcut remains available for this session. Check access to the appearance settings folder and retry saving before closing the editor.";
+            int failedSaveAttempts = 0;
+            using var failedSave = new PreviewHotkeyDialog(Keys.Control | Keys.Shift | Keys.P, keyData =>
+            {
+                failedSaveAttempts++;
+                Assert(main.ApplyPauseHotkey(keyData) == null, "Fake session shortcut application failed.");
+                return saveFailure;
+            });
+            PrepareOffscreen(failedSave);
+            Application.DoEvents();
+            failedSave.CaptureShortcut(Keys.Control | Keys.Alt | Keys.F9);
+            CheckHotkeyWidths(failedSave, Path.Combine(outputDirectory, theme + "-save-failure-before"), compact: true);
+            ((Button)failedSave.Controls.Find("buttonSave", true).Single()).PerformClick();
+            Application.DoEvents();
+            var failureFeedback = (Label)failedSave.Controls.Find("labelHotkeyStatus", true).Single();
+            Assert(failedSaveAttempts == 1 && failedSave.Visible && failedSave.DialogResult != DialogResult.OK &&
+                failureFeedback.Text == saveFailure && shortcut.Text == PauseHotkey.Format(Keys.Control | Keys.Alt | Keys.F9),
+                "A persistence failure closed the editor, hid part of its feedback, or lost the applied session shortcut.");
+            CheckHotkeyWidths(failedSave, Path.Combine(outputDirectory, theme + "-save-failure"), compact: false);
+            Assert(failedSaveAttempts == 1 && failedSave.KeyData == (Keys.Control | Keys.Alt | Keys.F9),
+                "Error layout resizing retried persistence or lost the current candidate.");
+            string sessionLabel = shortcut.Text;
+            ((Button)failedSave.Controls.Find("buttonCancel", true).Single()).PerformClick();
+            Assert(failedSave.DialogResult != DialogResult.OK && shortcut.Text == sessionLabel,
+                "Closing a failed-save editor reverted the successfully applied session chord.");
+
+            // Exercise WinForms' autoscale bounds and larger glyphs at synthetic 150%.
+            // PerformAutoScale does not itself change the native monitor DPI/font context.
+            // DeviceDpi stays real; this is a layout stress case, not WM_DPICHANGED proof.
+            using var scaled = new PreviewHotkeyDialog(PauseHotkey.Default, _ => saveFailure);
+            int unscaledMinimumWidth = scaled.MinimumSize.Width;
+            var scaledField = (TextBox)scaled.Controls.Find("textBoxHotkey", true).Single();
+            float unscaledFontSize = scaledField.Font.SizeInPoints;
+            var fontSources = Descendants(scaled).Prepend(scaled).Select(control => (Control: control, Font: control.Font)).ToArray();
+            var largerFonts = new List<Font>();
+            scaled.Disposed += (_, _) => { foreach (var font in largerFonts) font.Dispose(); };
+            SizeF actualScale = scaled.CurrentAutoScaleDimensions;
+            scaled.AutoScaleDimensions = new SizeF(actualScale.Width / 1.5F, actualScale.Height / 1.5F);
+            scaled.PerformAutoScale();
+            foreach (var source in fontSources)
+            {
+                var font = new Font(source.Font.FontFamily, source.Font.SizeInPoints * 1.5F, source.Font.Style, GraphicsUnit.Point);
+                largerFonts.Add(font);
+                source.Control.Font = font;
+            }
+            PrepareOffscreen(scaled);
+            Application.DoEvents();
+            Assert(scaled.MinimumSize.Width >= unscaledMinimumWidth * 1.45 && scaledField.Font.SizeInPoints >= unscaledFontSize * 1.45,
+                "The synthetic 150% preview did not scale both dialog dimensions and shortcut text.");
+            int compactScaledHeight = scaled.ClientSize.Height;
+            CheckHotkeyWidths(scaled, Path.Combine(outputDirectory, theme + "-synthetic-150-compact"), compact: true, syntheticScalePercent: 150);
+            ((Button)scaled.Controls.Find("buttonSave", true).Single()).PerformClick();
+            Application.DoEvents();
+            Assert(scaled.Visible && scaled.DialogResult != DialogResult.OK && scaled.ClientSize.Height > compactScaledHeight,
+                "Synthetic 150% multiline feedback did not expand the same compact editor.");
+            CheckHotkeyWidths(scaled, Path.Combine(outputDirectory, theme + "-synthetic-150-error"), compact: false, syntheticScalePercent: 150);
+            scaled.CaptureShortcut(Keys.Control | Keys.Shift | Keys.F10);
+            Application.DoEvents();
+            Assert(scaled.ClientSize.Height <= compactScaledHeight + 2,
+                "Clearing feedback did not shrink the scaled editor back to its compact content height.");
+            CheckHotkeyWidths(scaled, Path.Combine(outputDirectory, theme + "-synthetic-150-cleared"), compact: true, syntheticScalePercent: 150);
             Assert(main.Handle == mainHandle && backend.MutatingCalls == mutations,
                 "Shortcut editing recreated the main window or changed GPU/monitoring state.");
             CaptureWindow(main, Path.Combine(outputDirectory, theme + "-main.png"));
             main.Size = main.MinimumSize;
             CaptureWindow(main, Path.Combine(outputDirectory, theme + "-main-minimum.png"));
         }
-        Console.WriteLine("PASS: actual shortcut keydown capture, validation, collision/retry and cancel; immediate label update; Light/Dark renders; unchanged main HWND and zero GPU/monitor lifecycle calls.");
+        Console.WriteLine("PASS: actual shortcut capture, validation, collision/retry/cancel and session-only save failure; compact/default/minimum-width and synthetic 150% layouts; Light/Dark renders with DeviceDpi evidence; unchanged HWND and zero GPU/monitor lifecycle calls.");
+    }
+
+    private static void CheckHotkeyWidths(PreviewHotkeyDialog dialog, string outputPrefix, bool compact, int syntheticScalePercent = 100)
+    {
+        int originalWidth = dialog.Width;
+        IntPtr originalHandle = dialog.Handle;
+        Keys originalKey = dialog.KeyData;
+        var originalControls = Descendants(dialog).ToArray();
+        int minimumWidth = dialog.MinimumSize.Width;
+        Assert(minimumWidth > 0 && minimumWidth <= originalWidth, "The shortcut editor has no usable minimum width.");
+        try
+        {
+            foreach (var size in new[] { (Width: originalWidth, Name: "default"), (Width: minimumWidth, Name: "minimum-width") })
+            {
+                dialog.Width = size.Width;
+                dialog.PerformLayout();
+                Application.DoEvents();
+                Assert(dialog.Width == size.Width,
+                    $"The shortcut editor rejected its requested {size.Name} width ({size.Width}); actual width {dialog.Width}.");
+                Assert(dialog.Handle == originalHandle && dialog.KeyData == originalKey &&
+                    Descendants(dialog).SequenceEqual(originalControls), "Shortcut layout resizing recreated controls or changed the captured chord.");
+                var field = (TextBox)dialog.Controls.Find("textBoxHotkey", true).Single();
+                var feedback = (Label)dialog.Controls.Find("labelHotkeyStatus", true).Single();
+                var save = (Button)dialog.Controls.Find("buttonSave", true).Single();
+                var cancel = (Button)dialog.Controls.Find("buttonCancel", true).Single();
+                Control actions = save.Parent!;
+                Rectangle client = dialog.RectangleToScreen(dialog.ClientRectangle);
+                Rectangle fieldBounds = field.RectangleToScreen(new Rectangle(Point.Empty, field.Size));
+                Rectangle actionsBounds = actions.RectangleToScreen(actions.ClientRectangle);
+                Rectangle saveBounds = save.RectangleToScreen(new Rectangle(Point.Empty, save.Size));
+                Rectangle cancelBounds = cancel.RectangleToScreen(new Rectangle(Point.Empty, cancel.Size));
+                Assert(client.Contains(fieldBounds) && client.Contains(actionsBounds) && client.Contains(saveBounds) && client.Contains(cancelBounds),
+                    "A shortcut input/action control extends outside the compact dialog's client bounds.");
+                Assert(!saveBounds.IntersectsWith(cancelBounds) && fieldBounds.Bottom <= actionsBounds.Top,
+                    "Shortcut input or Save/Cancel buttons overlap.");
+                foreach (var label in Descendants(dialog).OfType<Label>().Where(label => label.Visible && !string.IsNullOrEmpty(label.Text)))
+                {
+                    Rectangle labelBounds = label.RectangleToScreen(new Rectangle(Point.Empty, label.Size));
+                    int preferredHeight = label.GetPreferredSize(new Size(label.Width, 0)).Height;
+                    Assert(client.Contains(labelBounds) && label.Height + 1 >= preferredHeight,
+                        $"Shortcut text is clipped at width {dialog.ClientSize.Width}: label {label.Name}, actual height {label.Height}, required {preferredHeight}.");
+                }
+                if (compact)
+                {
+                    Assert(string.IsNullOrEmpty(feedback.Text), "Compact capture layout unexpectedly contains feedback.");
+                    int allowedGap = field.Margin.Bottom + actions.Margin.Top + 4;
+                    Assert(actionsBounds.Top - fieldBounds.Bottom <= allowedGap,
+                        "An empty feedback row still reserves a large blank region in the shortcut editor.");
+                }
+                else
+                {
+                    Rectangle feedbackBounds = feedback.RectangleToScreen(new Rectangle(Point.Empty, feedback.Size));
+                    Assert(feedback.Visible && !string.IsNullOrEmpty(feedback.Text) &&
+                        fieldBounds.Bottom <= feedbackBounds.Top && feedbackBounds.Bottom <= actionsBounds.Top,
+                        "Multiline shortcut feedback overlaps the input/actions or is hidden.");
+                }
+                string output = outputPrefix + "-" + size.Name + ".png";
+                CaptureWindow(dialog, output);
+                File.WriteAllText(Path.ChangeExtension(output, ".json"), JsonSerializer.Serialize(new
+                {
+                    Case = Path.GetFileName(outputPrefix),
+                    WidthCase = size.Name,
+                    DeviceDpi = dialog.DeviceDpi,
+                    SyntheticScalePercent = syntheticScalePercent,
+                    AutoScaleMode = dialog.AutoScaleMode.ToString(),
+                    ClientWidth = dialog.ClientSize.Width,
+                    ClientHeight = dialog.ClientSize.Height,
+                    MinimumWidth = minimumWidth,
+                    FeedbackVisible = feedback.Visible,
+                    FeedbackWidth = feedback.Width,
+                    FeedbackHeight = feedback.Height,
+                    FeedbackPreferredHeight = feedback.GetPreferredSize(new Size(feedback.Width, 0)).Height,
+                    InputBounds = fieldBounds.ToString(),
+                    ActionBounds = actionsBounds.ToString()
+                }, new JsonSerializerOptions { WriteIndented = true }));
+            }
+        }
+        finally { if (!dialog.IsDisposed) dialog.Width = originalWidth; }
     }
 
     private static void CheckNativeHotkeys()

@@ -20,6 +20,8 @@ namespace vibrance.GUI.common
 
     internal static partial class AppTheme
     {
+        private enum VisualRole { PrimaryButton, MutedText }
+
         internal sealed class Preferences
         {
             public Preferences() { }
@@ -45,6 +47,9 @@ namespace vibrance.GUI.common
             ? SystemColors.ControlText
             : SystemColors.Control.GetBrightness() < 0.5f
                 ? Color.FromArgb(93, 219, 182) : Color.FromArgb(0, 112, 83);
+        internal static Color MutedColor => SystemInformation.HighContrast ? SystemColors.ControlText
+            : Application.IsDarkModeEnabled ? Color.FromArgb(174, 182, 194) : Color.FromArgb(87, 97, 111);
+        private static Color AccentColor => SystemInformation.HighContrast ? SystemColors.Highlight : Color.FromArgb(23, 100, 160);
 
         // Call before creating any window. Native controls and dialogs then share the theme.
         public static void Initialize()
@@ -193,13 +198,15 @@ namespace vibrance.GUI.common
             }
             if (control is LinkLabel link)
                 link.LinkColor = link.ActiveLinkColor = link.VisitedLinkColor = LinkColor;
+            if (control is Label label && label.Tag is VisualRole.MutedText)
+                label.ForeColor = MutedColor;
             if (control is TrackBar slider)
                 // A known-color brush can retain the old native system palette after a live switch.
                 slider.BackColor = Color.FromArgb(SystemColors.Control.ToArgb());
             if (control is ThemedComboBox combo) combo.RefreshThemeColors();
             if (control is Button button)
             {
-                button.FlatAppearance.BorderColor = SystemColors.ControlDark;
+                RefreshButtonColors(button);
                 if (button.FlatStyle is FlatStyle.Flat or FlatStyle.Popup)
                 {
                     // WinForms caches the owner-draw adapter chosen under the old color mode.
@@ -297,19 +304,47 @@ namespace vibrance.GUI.common
             form.ForeColor = SystemColors.ControlText;
         }
 
-        public static Button Button(string text, EventHandler click)
+        internal static GroupBox Section(string text) => new QuietSection { Text = text };
+
+        internal static Label MutedLabel(string text, bool flushText = false)
+        {
+            Label label = flushText ? new HeaderLabel() : new Label();
+            label.Text = text;
+            label.AutoSize = true;
+            label.ForeColor = MutedColor;
+            label.Tag = VisualRole.MutedText;
+            return label;
+        }
+
+        private static void RefreshButtonColors(Button button)
+        {
+            bool primary = button.Tag is VisualRole.PrimaryButton && button.Enabled;
+            button.UseVisualStyleBackColor = !primary;
+            button.BackColor = primary ? AccentColor : Color.Empty;
+            button.ForeColor = primary ? SystemInformation.HighContrast ? SystemColors.HighlightText : Color.White
+                : Color.Empty;
+            button.FlatAppearance.BorderColor = primary ? AccentColor : SystemColors.ControlDark;
+            button.FlatAppearance.MouseOverBackColor = SystemInformation.HighContrast ? button.BackColor
+                : primary ? Color.FromArgb(28, 115, 182)
+                : Application.IsDarkModeEnabled ? Color.FromArgb(52, 56, 62) : Color.FromArgb(230, 235, 241);
+            button.FlatAppearance.MouseDownBackColor = SystemInformation.HighContrast ? button.BackColor
+                : primary ? Color.FromArgb(18, 80, 130) : SystemColors.ControlDark;
+        }
+
+        public static Button Button(string text, EventHandler click, bool primary = false)
         {
             var button = new Button
             {
                 Text = text,
                 AutoSize = true,
-                MinimumSize = new Size(96, 36),
-                Padding = new Padding(12, 4, 12, 4),
+                MinimumSize = new Size(80, 30),
+                Padding = new Padding(10, 2, 10, 2),
                 FlatStyle = FlatStyle.Flat,
                 Margin = new Padding(0, 0, 8, 0),
-                UseVisualStyleBackColor = true
+                Tag = primary ? VisualRole.PrimaryButton : null
             };
-            button.FlatAppearance.BorderColor = SystemColors.ControlDark;
+            RefreshButtonColors(button);
+            button.EnabledChanged += (sender, args) => RefreshButtonColors(button);
             button.Click += click;
             return button;
         }

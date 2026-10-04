@@ -250,7 +250,6 @@ namespace vibrance.GUI.common
                 AppTheme.Apply(preference);
                 if (_closing || IsDisposed) return;
                 if (_initializeRuntime) SaveAppearancePreferences();
-                labelThemeStatus.Text = "Appearance changes apply immediately.";
             }
             catch (Exception ex) when (ex is ExternalException || ex is Win32Exception)
             {
