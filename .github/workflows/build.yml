@@ -19,6 +19,8 @@ jobs:
         run: dotnet build vibrance.GUI.sln -c Release
       - name: Regression checks
         run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release
+      - name: Live theme switching checks
+        run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --theme-switch artifacts/theme-switch
       - name: Publish portable executable
         shell: pwsh
         run: ./scripts/publish.ps1

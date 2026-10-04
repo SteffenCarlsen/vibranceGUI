@@ -1,8 +1,13 @@
 using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace vibrance.GUI.common
 {
@@ -13,7 +18,7 @@ namespace vibrance.GUI.common
         Dark
     }
 
-    internal static class AppTheme
+    internal static partial class AppTheme
     {
         private sealed class Preferences
         {
@@ -23,6 +28,9 @@ namespace vibrance.GUI.common
         }
 
         private static Preferences _preferences = new Preferences();
+        private static bool _applying;
+        private static ThemePreference? _pendingPreference;
+        private static WeakReference<VibranceGUI> _systemOwner;
         private static readonly string PreferencesPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "vibranceGUI", "appearance.json");
@@ -66,6 +74,174 @@ namespace vibrance.GUI.common
                 _ => SystemColorMode.System
             });
         }
+
+        public static void Apply(ThemePreference preference)
+        {
+            // SetColorMode pumps messages while broadcasting the palette change. A second
+            // selection must wait until the current pass has refreshed all existing controls.
+            _pendingPreference = preference;
+            if (_applying) return;
+            _applying = true;
+            try
+            {
+                while (_pendingPreference is ThemePreference next)
+                {
+                    _pendingPreference = null;
+                    Initialize(next);
+                    var forms = Application.OpenForms.Cast<Form>().ToList();
+                    if (_systemOwner != null && _systemOwner.TryGetTarget(out var owner)
+                        && owner.CanApplyTheme && !forms.Contains(owner))
+                        forms.Add(owner); // Fresh minimized startup has a handle before it enters OpenForms.
+                    foreach (Form form in forms)
+                    {
+                        if (form.IsDisposed || form.Disposing || form is VibranceGUI closingMain && !closingMain.CanApplyTheme) continue;
+                        RefreshControl(form);
+                        if (form is VibranceGUI main) main.RefreshThemeColors();
+                    }
+                }
+            }
+            finally { _applying = false; }
+        }
+
+        public static void WatchSystemPreferences(VibranceGUI owner)
+        {
+            if (_systemOwner == null) SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+            _systemOwner = new WeakReference<VibranceGUI>(owner);
+        }
+
+        public static void UnwatchSystemPreferences(VibranceGUI owner)
+        {
+            if (_systemOwner == null || !_systemOwner.TryGetTarget(out var current) || current == owner)
+            {
+                var remaining = Application.OpenForms.OfType<VibranceGUI>()
+                    .FirstOrDefault(window => window != owner && window.CanApplyTheme);
+                if (remaining != null)
+                {
+                    _systemOwner = new WeakReference<VibranceGUI>(remaining);
+                    return;
+                }
+                SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+                _systemOwner = null;
+            }
+        }
+
+        private static void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs args)
+        {
+            if (args.Category is UserPreferenceCategory.Accessibility or UserPreferenceCategory.Color
+                or UserPreferenceCategory.General or UserPreferenceCategory.VisualStyle)
+                RefreshSystemPreferences();
+        }
+
+        internal static void RefreshSystemPreferences()
+        {
+            var reference = _systemOwner;
+            if (reference == null || !reference.TryGetTarget(out var owner) || !owner.CanApplyTheme || !owner.IsHandleCreated) return;
+            try
+            {
+                owner.BeginInvoke((Action)(() =>
+                {
+                    if (owner.CanApplyTheme) Apply(_pendingPreference ?? Preference);
+                }));
+            }
+            catch (InvalidOperationException) { } // The owner can close between the checks and the post.
+        }
+
+        internal static void RefreshMenu(ContextMenuStrip menu)
+        {
+            if (!menu.IsDisposed) RefreshControl(menu);
+        }
+
+        private static void RefreshControl(Control control)
+        {
+            if (control.IsDisposed || control.Disposing) return;
+            if (control is Form)
+            {
+                control.BackColor = SystemColors.Control;
+                control.ForeColor = SystemColors.ControlText;
+            }
+            if (control is LinkLabel link)
+                link.LinkColor = link.ActiveLinkColor = link.VisitedLinkColor = LinkColor;
+            if (control is TrackBar slider)
+                // A known-color brush can retain the old native system palette after a live switch.
+                slider.BackColor = Color.FromArgb(SystemColors.Control.ToArgb());
+            if (control is Button button)
+            {
+                button.FlatAppearance.BorderColor = SystemColors.ControlDark;
+                if (button.FlatStyle is FlatStyle.Flat or FlatStyle.Popup)
+                {
+                    // WinForms caches the owner-draw adapter chosen under the old color mode.
+                    // A measured alternate style replaces it without recreating the HWND.
+                    FlatStyle style = button.FlatStyle;
+                    button.FlatStyle = style == FlatStyle.Flat ? FlatStyle.Popup : FlatStyle.Flat;
+                    _ = button.GetPreferredSize(Size.Empty);
+                    button.FlatStyle = style;
+                    _ = button.GetPreferredSize(Size.Empty);
+                }
+            }
+            if (control is ToolStrip menu)
+            {
+                menu.RenderMode = ToolStripRenderMode.System;
+                menu.BackColor = SystemColors.Control;
+                menu.ForeColor = SystemColors.ControlText;
+            }
+            if (control.IsHandleCreated) RefreshNativeTheme(control);
+            foreach (Control child in control.Controls) RefreshControl(child);
+            control.Invalidate(true);
+        }
+
+        private static void RefreshNativeTheme(Control control)
+        {
+            bool dark = Application.IsDarkModeEnabled;
+            IntPtr window = control.Handle; // Borrowed handles stay owned by their controls.
+            SetTheme(window, dark ? control is ComboBox ? "DarkMode_CFD" : "DarkMode_Explorer" : null);
+            if (control is ListView list)
+            {
+                list.BackColor = SystemColors.Window;
+                list.ForeColor = SystemColors.WindowText;
+                SendMessageW(window, 0x1001, IntPtr.Zero, (IntPtr)ColorTranslator.ToWin32(list.BackColor));
+                SendMessageW(window, 0x1024, IntPtr.Zero, (IntPtr)ColorTranslator.ToWin32(list.ForeColor));
+                SendMessageW(window, 0x1026, IntPtr.Zero, (IntPtr)(-1));
+                SetTheme(SendMessageW(window, 0x101F, IntPtr.Zero, IntPtr.Zero), dark ? "DarkMode_ItemsView" : null);
+            }
+            if (control is ComboBox)
+            {
+                var info = new ComboBoxInfo { Size = (uint)Marshal.SizeOf<ComboBoxInfo>() };
+                if (GetComboBoxInfo(window, ref info) == 0) throw new Win32Exception(Marshal.GetLastPInvokeError());
+                SetTheme(info.List, dark ? "DarkMode_Explorer" : null);
+            }
+            if (control is Form)
+            {
+                int enabled = dark ? 1 : 0;
+                int result = DwmSetWindowAttribute(window, 20, ref enabled, sizeof(int));
+                if (result < 0) Debug.WriteLine("The window caption does not support the selected color mode: " + result);
+            }
+        }
+
+        private static void SetTheme(IntPtr window, string theme)
+        {
+            if (window != IntPtr.Zero) Marshal.ThrowExceptionForHR(SetWindowTheme(window, theme, null));
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeRectangle { public int Left, Top, Right, Bottom; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ComboBoxInfo
+        {
+            public uint Size;
+            public NativeRectangle ItemBounds, ButtonBounds;
+            public uint ButtonState;
+            public IntPtr Combo, Item, List;
+        }
+
+        [LibraryImport("uxtheme.dll", StringMarshalling = StringMarshalling.Utf16)]
+        private static partial int SetWindowTheme(IntPtr window, string theme, string classes);
+        [LibraryImport("user32.dll", SetLastError = true)]
+        private static partial int GetComboBoxInfo(IntPtr window, ref ComboBoxInfo info);
+        [LibraryImport("user32.dll")]
+        private static partial IntPtr SendMessageW(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+        [LibraryImport("dwmapi.dll")]
+        private static partial int DwmSetWindowAttribute(IntPtr window, uint attribute, ref int value, uint size);
 
         public static void Save(ThemePreference preference, bool enablePauseHotkey)
         {

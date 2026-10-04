@@ -22,7 +22,11 @@ namespace vibrance.GUI.common
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) components?.Dispose();
+            if (disposing)
+            {
+                AppTheme.UnwatchSystemPreferences(this);
+                components?.Dispose();
+            }
             base.Dispose(disposing);
         }
 
@@ -44,7 +48,7 @@ namespace vibrance.GUI.common
             settingsSaveTimer = new Timer(components) { Interval = 750 };
             settingsSaveTimer.Tick += settingsSaveTimer_Tick;
 
-            contextMenuStrip = new ContextMenuStrip(components);
+            contextMenuStrip = new ContextMenuStrip(components) { RenderMode = ToolStripRenderMode.System };
             pauseToolStripMenuItem = new ToolStripMenuItem("Pause", null, buttonPause_Click) { Enabled = false };
             contextMenuStrip.Items.AddRange(new ToolStripItem[]
             {
@@ -98,7 +102,7 @@ namespace vibrance.GUI.common
             var levelTitle = new Label { Text = "Windows Vibrance Level", AutoSize = true, Margin = new Padding(0, 0, 0, 4) };
             levelLayout.Controls.Add(levelTitle, 0, 0);
             levelLayout.SetColumnSpan(levelTitle, 2);
-            trackBarWindowsLevel = new TrackBar { Dock = DockStyle.Fill, Maximum = 100, TickStyle = TickStyle.None, Margin = Padding.Empty, AccessibleName = "Windows Vibrance Level" };
+            trackBarWindowsLevel = new TrackBar { Dock = DockStyle.Fill, Maximum = 100, TickStyle = TickStyle.None, Margin = Padding.Empty, AccessibleName = "Windows Vibrance Level", BackColor = Color.FromArgb(SystemColors.Control.ToArgb()) };
             trackBarWindowsLevel.ValueChanged += trackBarWindowsLevel_Scroll;
             labelWindowsLevel = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Font = new Font("Segoe UI", 14F, FontStyle.Bold), Margin = new Padding(8, 0, 0, 0) };
             levelLayout.Controls.Add(trackBarWindowsLevel, 0, 1);
@@ -119,7 +123,7 @@ namespace vibrance.GUI.common
 
             var appearance = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Margin = Padding.Empty };
             appearance.Controls.Add(new Label { Text = "Appearance", AutoSize = true, Margin = new Padding(0, 6, 12, 0) });
-            comboBoxTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110, Margin = new Padding(0, 0, 18, 8), AccessibleName = "Appearance" };
+            comboBoxTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110, Margin = new Padding(0, 0, 18, 8), AccessibleName = "Appearance", Name = "comboBoxTheme" };
             foreach (ThemePreference preference in Enum.GetValues<ThemePreference>()) comboBoxTheme.Items.Add(preference);
             comboBoxTheme.SelectedIndexChanged += comboBoxTheme_SelectedIndexChanged;
             appearance.Controls.Add(comboBoxTheme);
@@ -127,7 +131,7 @@ namespace vibrance.GUI.common
             checkBoxPauseHotkey.CheckedChanged += checkBoxPauseHotkey_CheckedChanged;
             appearance.Controls.Add(checkBoxPauseHotkey);
             settingsLayout.Controls.Add(appearance);
-            labelThemeStatus = new Label { Text = "Appearance changes apply after restarting vibranceGUI.", AutoSize = true, Margin = new Padding(0, 0, 0, 2) };
+            labelThemeStatus = new Label { Text = "Appearance changes apply immediately.", AutoSize = true, Margin = new Padding(0, 0, 0, 2) };
             settingsLayout.Controls.Add(labelThemeStatus);
             settings.Controls.Add(settingsLayout);
             layout.Controls.Add(settings, 0, 1);

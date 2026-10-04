@@ -61,7 +61,9 @@ namespace vibrance.GUI.common
                 statusLabel.Text = "Preview";
                 statusLabel.ForeColor = AppTheme.SuccessColor;
                 SetGuiEnabledFlag(true);
+                _loadingSettings = false;
             }
+            AppTheme.WatchSystemPreferences(this);
         }
 
         protected override void SetVisibleCore(bool value)
@@ -133,6 +135,7 @@ namespace vibrance.GUI.common
         {
             if (_closing) return;
             _closing = true;
+            AppTheme.UnwatchSystemPreferences(this);
             settingsSaveTimer.Stop();
             if (!_initializeRuntime) return;
             if (_settingsLoaded) ForceSaveVibranceSettings();
@@ -240,10 +243,26 @@ namespace vibrance.GUI.common
         }
         private void comboBoxTheme_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (_loadingSettings || !_initializeRuntime) return;
-            SaveAppearancePreferences();
-            labelThemeStatus.Text = "Appearance changes apply after restarting vibranceGUI.";
+            if (_loadingSettings || _closing || comboBoxTheme.SelectedItem is not ThemePreference preference) return;
+            try
+            {
+                AppTheme.Apply(preference);
+                if (_closing || IsDisposed) return;
+                if (_initializeRuntime) SaveAppearancePreferences();
+                labelThemeStatus.Text = "Appearance changes apply immediately.";
+            }
+            catch (Exception ex) when (ex is ExternalException || ex is Win32Exception)
+            {
+                if (!_initializeRuntime) throw;
+                MessageBox.Show(this, ex.Message, "Appearance could not be applied", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
+        internal void RefreshThemeColors()
+        {
+            statusLabel.ForeColor = statusLabel.Text is "Running!" or "Preview" ? AppTheme.SuccessColor : SystemColors.ControlText;
+            AppTheme.RefreshMenu(contextMenuStrip);
+        }
+        internal bool CanApplyTheme => !_closing && !IsDisposed && !Disposing;
         private void checkBoxPauseHotkey_CheckedChanged(object sender, EventArgs e)
         {
             if (_loadingSettings || !_initializeRuntime) return;

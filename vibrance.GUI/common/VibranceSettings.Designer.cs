@@ -54,7 +54,7 @@ namespace vibrance.GUI.common
             var levelLayout = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2 };
             levelLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             levelLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 76));
-            trackBarIngameLevel = new TrackBar { Dock = DockStyle.Fill, TickStyle = TickStyle.None, Margin = Padding.Empty, AccessibleName = "Ingame Vibrance Level" };
+            trackBarIngameLevel = new TrackBar { Dock = DockStyle.Fill, TickStyle = TickStyle.None, Margin = Padding.Empty, AccessibleName = "Ingame Vibrance Level", BackColor = Color.FromArgb(SystemColors.Control.ToArgb()) };
             trackBarIngameLevel.ValueChanged += trackBarIngameLevel_Scroll;
             labelIngameLevel = new Label { Text = "50%", AutoSize = true, Font = new Font("Segoe UI", 14F, FontStyle.Bold), Anchor = AnchorStyles.Left };
             levelLayout.Controls.Add(trackBarIngameLevel, 0, 0);
