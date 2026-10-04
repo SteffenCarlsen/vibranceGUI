@@ -436,7 +436,7 @@ namespace vibrance.GUI.common
             var images = listApplications.LargeImageList;
             images.Images.Add(icon);
             var item = new ListViewItem(new[] { profile.Name ?? Path.GetFileNameWithoutExtension(profile.FileName),
-                _resolveLabelLevel(profile.IngameLevel), profile.IsResolutionChangeNeeded ? profile.ResolutionSettings?.ToString() ?? "Windows" : "Windows" }, images.Images.Count - 1)
+                _resolveLabelLevel(profile.IngameLevel), profile.IsResolutionChangeNeeded ? profile.ResolutionSettings?.ToString() ?? "Unchanged" : "Unchanged" }, images.Images.Count - 1)
             { Tag = profile.FileName, ToolTipText = profile.FileName };
             listApplications.Items.Add(item);
             return item;
@@ -461,7 +461,7 @@ namespace vibrance.GUI.common
                 _applicationSettings.Remove(current);
                 _applicationSettings.Add(updated);
                 item.SubItems[1].Text = _resolveLabelLevel(updated.IngameLevel);
-                item.SubItems[2].Text = updated.IsResolutionChangeNeeded ? updated.ResolutionSettings.ToString() : "Windows";
+                item.SubItems[2].Text = updated.IsResolutionChangeNeeded ? updated.ResolutionSettings.ToString() : "Unchanged";
                 _v.SetApplicationSettings(_applicationSettings);
                 ForceSaveVibranceSettings();
             }

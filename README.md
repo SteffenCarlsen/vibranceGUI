@@ -45,7 +45,7 @@ Minimizing hides the window in the tray. Pause restores the desktop settings; Re
 
 - A profile applies while its program is in the foreground. When Windows allows the executable path to be read, it must match the configured executable. If a protected process denies that query, matching falls back to the process name.
 - **Affect Primary Monitor only** limits color changes to the primary monitor. Restoration tracks the displays previously changed, including when focus moves to another monitor or the scope changes.
-- Resolution changes are optional per profile and target the foreground window's monitor independently of the color-only primary-monitor option. **Never change resolutions** disables them globally. A vibrance-only profile does not change resolution or refresh rate.
+- Resolution changes are optional per profile and target the foreground window's monitor independently of the color-only primary-monitor option. **Never change resolutions** disables them globally. A vibrance-only profile does not change resolution or refresh rate; its Resolution column shows **Unchanged**.
 - Requested resolution modes are checked before applying. The app restores captured modes only for displays whose resolution it changed, and retains failed restoration operations for retry.
 - The running-program picker loads asynchronously. Protected or inaccessible programs can be added manually; missing executables remain in saved profiles with a fallback icon.
 
@@ -204,7 +204,7 @@ Original-repository context: [PR #157](https://github.com/juv/vibranceGUI/pull/1
 #### Profiles, resolution, and settings
 
 1. Added executable-path matching with protected-process name fallback, foreground reconciliation, and suppression of redundant color writes.
-2. Preserved optional resolution profiles while testing requested modes, applying per display, reading back results, and restoring only captured modes the app changed.
+2. Preserved optional resolution profiles while testing requested modes, applying per display, reading back results, and restoring only captured modes the app changed. Clarified the profile list with **Unchanged** instead of **Windows** when no resolution override is configured.
 3. Added independent recovery for malformed desktop INI options, Unicode settings support, bounded levels, preservation of valid AMD desktop levels below 100%, and invalid/duplicate profile handling.
 4. Added atomic XML replacement, backups of the previous XML, preservation of unreadable originals before edits, and reported save/cleanup failures.
 5. Improved the profile list and asynchronous running-program picker: explicit Edit/keyboard actions, guarded empty selections, cancellation on close, fallback icons, and manual addition for inaccessible programs.
