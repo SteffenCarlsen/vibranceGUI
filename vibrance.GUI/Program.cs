@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System;
 using System.Collections.Generic;
@@ -31,8 +31,7 @@ namespace vibrance.GUI
                 return;
             }
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
+            ApplicationConfiguration.Initialize();
             NativeMethods.SetDllDirectory(CommonUtils.GetVibrance_GUI_AppDataPath());
 
             GraphicsAdapter adapter = GraphicsAdapterHelper.GetAdapter();
