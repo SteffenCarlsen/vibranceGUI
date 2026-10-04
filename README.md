@@ -229,7 +229,7 @@ The pause/toggle idea is selectively reimplemented from original [PR #153](https
 1. Pointed the working repository's `origin` to SteffenCarlsen/vibranceGUI while retaining the original repository as the `upstream` Git remote.
 2. Pointed application/project links and assembly repository metadata to this fork.
 3. Removed original follow/donation prompts from the main window/tray. About retains juv / juvlarN and juRiiir3 credits, original GitHub links, and the original developer's support link.
-4. Added the application icon and full version/source revision to About, plus documentation of fork support channels, original-project references, compatibility evidence, and this dated changelog.
+4. Added the application icon and full version/source revision to About, with consistent ordinary body-text colors, plus documentation of fork support channels, original-project references, compatibility evidence, and this dated changelog.
 
 #### Focused commit index
 

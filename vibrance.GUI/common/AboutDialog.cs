@@ -41,9 +41,9 @@ namespace vibrance.GUI.common
                 Text = "vibranceGUI", AutoSize = true, Dock = DockStyle.Top,
                 Font = new Font("Segoe UI", 18F, FontStyle.Bold), Margin = Padding.Empty
             }, 0, 0);
-            var version = AppTheme.MutedLabel("Version " + (typeof(AboutDialog).Assembly
+            var version = new Label { AutoSize = true, Text = "Version " + (typeof(AboutDialog).Assembly
                     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-                    ?? typeof(AboutDialog).Assembly.GetName().Version?.ToString()));
+                    ?? typeof(AboutDialog).Assembly.GetName().Version?.ToString()) };
             version.Name = "labelVersion";
             version.Dock = DockStyle.Top;
             version.Margin = new Padding(0, 3, 0, 12);
@@ -60,7 +60,7 @@ namespace vibrance.GUI.common
             creator.Controls.Add(CreateLink("juv / juvlarN", "linkOriginalDeveloper", OriginalDeveloperUrl, openLink));
             layout.Controls.Add(creator, 0, 3);
             layout.Controls.Add(CreateLink("Original project: juv/vibranceGUI", "linkOriginalProject", OriginalProjectUrl, openLink, 8), 0, 4);
-            var amdCredit = AppTheme.MutedLabel("Original AMD implementation: juRiiir3.");
+            var amdCredit = new Label { Text = "Original AMD implementation: juRiiir3.", AutoSize = true };
             amdCredit.Dock = DockStyle.Top;
             amdCredit.Margin = new Padding(0, 0, 0, 12);
             layout.Controls.Add(amdCredit, 0, 5);
