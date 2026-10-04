@@ -24,7 +24,7 @@ namespace vibrance.GUI.common
         private static extern IntPtr LoadLibrary(string dllToLoad);
 
         private const string _nvidiaDllName = "nvapi.dll";
-        private static readonly string _amdDllName = Environment.Is64BitOperatingSystem 
+        private static readonly string _amdDllName = Environment.Is64BitProcess
             ? AMD.vendor.adl64.AdlImport.AtiadlFileName
             : AMD.vendor.adl32.AdlImport.AtiadlFileName;
 
@@ -39,7 +39,7 @@ namespace vibrance.GUI.common
             }
             if (IsAdapterAvailable(_amdDllName))
             {
-                IAmdAdapter amdAdapter = Environment.Is64BitOperatingSystem ? (IAmdAdapter)new AmdAdapter64() :new AmdAdapter32();
+                IAmdAdapter amdAdapter = Environment.Is64BitProcess ? (IAmdAdapter)new AmdAdapter64() :new AmdAdapter32();
                 if (amdAdapter.IsAvailable())
                 {
                     return GraphicsAdapter.Amd;

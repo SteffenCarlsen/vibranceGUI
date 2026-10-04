@@ -39,7 +39,7 @@ namespace vibrance.GUI
 
             if (adapter == GraphicsAdapter.Amd)
             {
-                Func<List<ApplicationSetting>, Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>>, IVibranceProxy> getProxy = (x, y) => new AmdDynamicVibranceProxy(Environment.Is64BitOperatingSystem
+                Func<List<ApplicationSetting>, Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>>, IVibranceProxy> getProxy = (x, y) => new AmdDynamicVibranceProxy(Environment.Is64BitProcess
                     ? new AmdAdapter64()
                     : (IAmdAdapter)new AmdAdapter32(), x, y);
                 vibranceGui = new VibranceGUI(getProxy, 

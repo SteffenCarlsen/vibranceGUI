@@ -5,7 +5,7 @@ using System.Text;
 
 namespace vibrance.GUI.AMD.vendor
 {
-    public interface IAmdAdapter : IDisposable
+    public interface IAmdAdapter : vibrance.GUI.common.IDisplayVibranceBackend
     {
         void SetSaturationOnAllDisplays(int vibranceLevel);
 
