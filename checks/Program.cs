@@ -451,6 +451,7 @@ internal static class Checks
         int mutationsBefore = backend.MutatingCalls;
         int processId = Environment.ProcessId;
         Directory.CreateDirectory(outputDirectory);
+        CaptionChecks.Verify(windows, outputDirectory);
         foreach (var theme in new[] { ThemePreference.Dark, ThemePreference.Light, ThemePreference.Dark, ThemePreference.System, ThemePreference.Light })
         {
             appearance.SelectedItem = theme;

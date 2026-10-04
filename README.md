@@ -209,7 +209,7 @@ Resolution safety reimplements behavior proposed in original [PR #159](https://g
 #### Interface and appearance
 
 1. Modernized the main window, profile editor, process picker, About, and shortcut editor with quieter sections, restrained primary actions, compact buttons, a spectrum accent, and layouts that wrap or scroll at smaller sizes.
-2. Added System / Light / Dark appearance, immediate updates to existing windows/tray, preservation of selections/unsaved edits, and system-preference notifications.
+2. Added System / Light / Dark appearance, immediate updates to existing windows/tray with an explicit immediate title-bar repaint, preservation of selections/unsaved edits, and system-preference notifications.
 3. Resolved Windows app appearance before creating forms so System starts correctly in dark mode on Windows 10 as well as Windows 11; retained high-contrast precedence.
 4. Fixed unreadable dropdown popup rows and stale colors across repeated theme changes, including highlighted/disabled states and slider/button painting.
 5. Aligned section/header/list/footer margins and the visible left edges of the wordmark, subtitle, and spectrum accent; centered mixed settings controls, right-aligned Pause/percentage, and kept the footer on one row. Removed the redundant appearance hint and About ellipsis.
@@ -233,7 +233,7 @@ The pause/toggle idea is selectively reimplemented from original [PR #153](https
 
 #### Focused commit index
 
-The preview changes are grouped by behavior rather than by individual UI corrections. Each commit has a detailed body describing the change, applicable checks and related original issues/PRs. Inspect the full descriptions with `git log --reverse --format=full 919a9f2..feature/modern-vibrance`. This index lists the implementation commits; the documentation update follows them.
+The preview changes are grouped by behavior rather than by individual UI corrections. Each commit has a detailed body describing the change, applicable checks and related original issues/PRs. Inspect the full descriptions with `git log --reverse --format=full 919a9f2..feature/modern-vibrance`. This index lists the initial implementation commits; documentation and follow-up fixes follow them.
 
 | Date | Commit | Change |
 | --- | --- | --- |

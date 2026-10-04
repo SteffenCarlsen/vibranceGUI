@@ -254,6 +254,15 @@ namespace vibrance.GUI.common
                 int enabled = dark ? 1 : 0;
                 int result = DwmSetWindowAttribute(window, 20, ref enabled, sizeof(int));
                 if (result < 0) Debug.WriteLine("The window caption does not support the selected color mode: " + result);
+                else
+                {
+                    // Invalidate only covers client pixels. Repaint the native frame now
+                    // without changing activation, geometry or the existing window handle.
+                    // RDW_INVALIDATE | RDW_FRAME | RDW_UPDATENOW | RDW_NOCHILDREN.
+                    const uint redrawFrameNow = 0x0001 | 0x0400 | 0x0100 | 0x0040;
+                    if (RedrawWindow(window, IntPtr.Zero, IntPtr.Zero, redrawFrameNow) == 0)
+                        Debug.WriteLine("Windows could not repaint the updated window caption.");
+                }
             }
         }
 
@@ -282,6 +291,8 @@ namespace vibrance.GUI.common
         private static partial IntPtr SendMessageW(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
         [LibraryImport("dwmapi.dll")]
         private static partial int DwmSetWindowAttribute(IntPtr window, uint attribute, ref int value, uint size);
+        [LibraryImport("user32.dll")]
+        private static partial int RedrawWindow(IntPtr window, IntPtr updateRectangle, IntPtr updateRegion, uint flags);
 
         public static void Save(ThemePreference preference, bool enablePauseHotkey, Keys keyData) =>
             Save(preference, enablePauseHotkey, keyData, PreferencesPath);

@@ -111,6 +111,14 @@ Each of the 15 code/build revisions was built in Release in a task-owned worktre
 
 Production settings/controller/shortcut checks, live theme switching, System startup, 39 native dropdown cases, shortcut layout checks and Light/Dark normal/minimum renders passed at the relevant revisions. The final code build has zero warnings/errors. This history work did not repeat GPU writes or physical monitor modesets, restart the user's application, push a branch, or run remote CI.
 
+## Immediate title-bar refresh — 2026-10-04
+
+The reported live Light/Dark switch updated client controls while leaving the native title bar in its previous appearance. The theme path already set the DWM dark-caption attribute, but its final `Control.Invalidate` only invalidated client painting. After a successful DWM update, the app now calls `RedrawWindow` with `RDW_INVALIDATE | RDW_FRAME | RDW_UPDATENOW | RDW_NOCHILDREN`. This requests synchronous non-client painting without recreating, activating, moving or resizing the window. The borrowed HWND remains owned by the form. [Microsoft's frame repaint documentation](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-redrawwindow).
+
+The existing live-theme suite now attaches task-owned native window observers to the main, profile and process-picker previews. It checks completed `WM_NCPAINT` processing before `DoEvents`, delays or rendering across six repeated Light/Dark/System passes, including the already-selected Light mode. The check failed before the fix with `PreviewWindow did not repaint its non-client frame synchronously for Light`; after the fix, all windows processed one or two synchronous frame-paint messages per pass. HWNDs, client/window bounds, foreground and focus remained unchanged. Evidence is in `artifacts/caption-refresh/after/caption-refresh.json`.
+
+The Release build passed with zero warnings/errors, and production regression, complete live/reentrant theme switching and 39 native dropdown checks passed. Preview tests used fake backends, no user settings or physical input, and zero GPU/monitor lifecycle calls. This establishes native frame-paint delivery, not physical compositor pixel timing or certification of other Windows/high-contrast configurations.
+
 ## Remaining compatibility limits
 
 The [exhaustive upstream review](UPSTREAM_REVIEW.md) maps all **6 open PRs and 31 open issues** to implemented safeguards, deferred features, and required hardware checks. Source fixes are not blanket resolution of those reporters' machines.
