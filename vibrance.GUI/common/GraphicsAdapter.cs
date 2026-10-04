@@ -1,4 +1,6 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
+using Microsoft.Win32.SafeHandles;
 using System.IO;
 using System.Runtime.InteropServices;
 using vibrance.GUI.AMD.vendor;
@@ -60,6 +62,31 @@ namespace vibrance.GUI.common
             {
                 return false;
             }    
+        }
+    }
+    public interface IDisplayVibranceBackend : IDisposable
+    {
+        IReadOnlyList<string> DisplayNames { get; }
+        string GpuName { get; }
+        string InitializationError { get; }
+        bool SetLevel(string deviceName, int level);
+        void InvalidateCache() { }
+    }
+
+    internal sealed class DriverLibrary : SafeHandleZeroOrMinusOneIsInvalid
+    {
+        private DriverLibrary(IntPtr handle) : base(true) { SetHandle(handle); }
+
+        public static DriverLibrary Load(string fileName) =>
+            new DriverLibrary(NativeLibrary.Load(Path.Combine(Environment.SystemDirectory, fileName)));
+
+        public T GetExport<T>(string name) where T : Delegate =>
+            Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(handle, name));
+
+        protected override bool ReleaseHandle()
+        {
+            NativeLibrary.Free(handle);
+            return true;
         }
     }
 }
