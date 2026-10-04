@@ -17,6 +17,10 @@ namespace vibrance.GUI
         [STAThread]
         private static int Main(string[] args)
         {
+            // A diagnostic run never starts monitoring or changes display settings.
+            if (args.Contains("--diagnostics", StringComparer.OrdinalIgnoreCase))
+                return WriteDiagnostics(args);
+
             using var mutex = new Mutex(true, "vibranceGUI~Mutex", out bool ownsMutex);
             ApplicationConfiguration.Initialize();
             if (!ownsMutex)
@@ -27,7 +31,7 @@ namespace vibrance.GUI
             }
             try
             {
-                var adapter = GraphicsAdapterHelper.GetAdapter();
+                var adapter = SelectAdapter(args);
                 if (adapter == GraphicsAdapter.Unknown)
                 {
                     MessageBox.Show("No attached display with supported NVIDIA digital vibrance or AMD saturation control was found. " +
@@ -65,7 +69,18 @@ namespace vibrance.GUI
             }
         }
 
-
+        private static GraphicsAdapter SelectAdapter(string[] args)
+        {
+            int index = Array.FindIndex(args, argument => argument.Equals("--adapter", StringComparison.OrdinalIgnoreCase));
+            if (index >= 0)
+            {
+                if (index + 1 >= args.Length) throw new ArgumentException("--adapter requires nvidia or amd.");
+                if (args[index + 1].Equals("nvidia", StringComparison.OrdinalIgnoreCase)) return GraphicsAdapter.Nvidia;
+                if (args[index + 1].Equals("amd", StringComparison.OrdinalIgnoreCase)) return GraphicsAdapter.Amd;
+                throw new ArgumentException("--adapter requires nvidia or amd.");
+            }
+            return GraphicsAdapterHelper.GetAdapter();
+        }
 
         internal static IVibranceProxy CreateProxy(GraphicsAdapter adapter, List<ApplicationSetting> profiles,
             Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>> resolutions)
@@ -75,7 +90,52 @@ namespace vibrance.GUI
                 : new NvidiaDynamicVibranceProxy(profiles, resolutions);
         }
 
-
+        private static int WriteDiagnostics(string[] args)
+        {
+            try
+            {
+                int index = Array.FindIndex(args, argument => argument.Equals("--diagnostics", StringComparison.OrdinalIgnoreCase));
+                string output = index + 1 < args.Length && !args[index + 1].StartsWith("-")
+                    ? args[index + 1] : Path.Combine(Environment.CurrentDirectory, "gpu-diagnostics.json");
+                var backends = new List<object>();
+                foreach (var adapter in new[] { GraphicsAdapter.Nvidia, GraphicsAdapter.Amd })
+                {
+                    IVibranceProxy proxy = null;
+                    try
+                    {
+                        proxy = CreateProxy(adapter, new List<ApplicationSetting>(),
+                            new Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>>());
+                        var info = proxy.GetVibranceInfo();
+                        backends.Add(new { Adapter = adapter.ToString(), Initialized = info.isInitialized,
+                            Error = proxy.InitializationError, info.szGpuName, info.activeOutput,
+                            DisplayCount = info.activeOutput });
+                    }
+                    catch (Exception ex) { backends.Add(new { Adapter = adapter.ToString(), Initialized = false, Error = ex.Message }); }
+                    finally { proxy?.UnloadLibraryEx(); }
+                }
+                var report = new
+                {
+                    Timestamp = DateTimeOffset.Now,
+                    Version = Application.ProductVersion,
+                    OS = Environment.OSVersion.ToString(),
+                    ProcessArchitecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
+                    Runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                    SelectedAdapter = GraphicsAdapterHelper.GetAdapter().ToString(),
+                    Displays = Screen.AllScreens.Select(screen => new { screen.DeviceName, screen.Primary, screen.Bounds }),
+                    Backends = backends,
+                    ReadOnly = true
+                };
+                output = Path.GetFullPath(output);
+                Directory.CreateDirectory(Path.GetDirectoryName(output));
+                File.WriteAllText(output, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 3;
+            }
+        }
 
     }
 }
