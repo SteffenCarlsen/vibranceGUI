@@ -73,13 +73,13 @@ namespace vibrance.GUI.common
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             var header = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 2, Margin = new Padding(0, 0, 0, 24) };
-            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             header.Controls.Add(new HeaderLabel { Text = "vibranceGUI", Font = new Font("Segoe UI Semibold", 22F), AutoSize = true, Margin = Padding.Empty }, 0, 0);
             var subtitle = AppTheme.MutedLabel("Automatic vibrance for your games", flushText: true);
             subtitle.Margin = new Padding(0, 2, 0, 0);
             header.Controls.Add(subtitle, 0, 1);
-            header.Controls.Add(new SpectrumBand { Size = new Size(168, 3), Margin = new Padding(0, 10, 0, 0) }, 0, 2);
+            header.Controls.Add(new SpectrumBand { Dock = DockStyle.Fill, Size = new Size(0, 3), Margin = new Padding(0, 10, 0, 0) }, 0, 2);
             buttonPause = AppTheme.Button("Pause", buttonPause_Click);
             buttonPause.Anchor = AnchorStyles.Right;
             buttonPause.Margin = Padding.Empty;

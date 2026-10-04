@@ -119,6 +119,10 @@ The existing live-theme suite now attaches task-owned native window observers to
 
 The Release build passed with zero warnings/errors, and production regression, complete live/reentrant theme switching and 39 native dropdown checks passed. Preview tests used fake backends, no user settings or physical input, and zero GPU/monitor lifecycle calls. This establishes native frame-paint delivery, not physical compositor pixel timing or certification of other Windows/high-contrast configurations.
 
+## Caption-width spectrum accent — 2026-10-04
+
+The header caption column now uses native automatic sizing and the spectrum band fills that column. Its width follows the wider title/subtitle rather than a fixed 168 pixels; the remaining column keeps Pause aligned to the right. Font/DPI layout uses the existing native controls without manual text measurements or early HWND creation. At the local DPI, the band is 218 pixels wide. The zero-warning/error Release build and safe Light/Dark normal/minimum renders passed under `artifacts/ui-polish-followup/`; the header text is complete and its visible left edge remains aligned. The user's app was not restarted.
+
 ## Remaining compatibility limits
 
 The [exhaustive upstream review](UPSTREAM_REVIEW.md) maps all **6 open PRs and 31 open issues** to implemented safeguards, deferred features, and required hardware checks. Source fixes are not blanket resolution of those reporters' machines.

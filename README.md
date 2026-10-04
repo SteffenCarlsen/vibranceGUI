@@ -212,7 +212,7 @@ Resolution safety reimplements behavior proposed in original [PR #159](https://g
 2. Added System / Light / Dark appearance, immediate updates to existing windows/tray with an explicit immediate title-bar repaint, preservation of selections/unsaved edits, and system-preference notifications.
 3. Resolved Windows app appearance before creating forms so System starts correctly in dark mode on Windows 10 as well as Windows 11; retained high-contrast precedence.
 4. Fixed unreadable dropdown popup rows and stale colors across repeated theme changes, including highlighted/disabled states and slider/button painting.
-5. Aligned section/header/list/footer margins and the visible left edges of the wordmark, subtitle, and spectrum accent; centered mixed settings controls, right-aligned Pause/percentage, and kept the footer on one row. Removed the redundant appearance hint and About ellipsis.
+5. Aligned section/header/list/footer margins and the visible left edges of the wordmark, subtitle, and spectrum accent, whose width follows the wider caption; centered mixed settings controls, right-aligned Pause/percentage, and kept the footer on one row. Removed the redundant appearance hint and About ellipsis.
 
 #### Pause shortcut and autostart
 
