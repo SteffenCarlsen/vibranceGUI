@@ -11,7 +11,7 @@ vibranceGUI switches NVIDIA digital vibrance or AMD saturation when a configured
 | Contributions to this fork | [Fork pull requests](https://github.com/SteffenCarlsen/vibranceGUI/pulls) |
 | Original project and inherited history | [juv/vibranceGUI](https://github.com/juv/vibranceGUI) |
 
-The current development version is **3.0.0**. The modernization is on `feature/modern-vibrance`. The [changelog](#changelog-since-the-original-project) records this fork's changes from original commit `919a9f2`; it does not relabel the original application's releases.
+The current development version is **3.0.0.0**. The modernization is on `feature/modern-vibrance`. The [changelog](#changelog-since-the-original-project) records this fork's changes from original commit `919a9f2`; it does not relabel the original application's releases.
 
 ## What this fork changes
 
@@ -25,7 +25,7 @@ The current development version is **3.0.0**. The modernization is on `feature/m
 
 Supported target: **Windows 10/11 x64**, with an attached display whose GPU exposes NVIDIA digital vibrance or AMD saturation control. The published `vibrance.GUI.exe` bundles **.NET 10**; users do not need to install .NET separately.
 
-Build the current version from this checkout using the [build instructions](#build-and-verify). Published builds of this fork belong on [this fork's Releases page](https://github.com/SteffenCarlsen/vibranceGUI/releases); workflow artifacts belong to [this fork's Actions](https://github.com/SteffenCarlsen/vibranceGUI/actions). The changelog's current 3.0.0 entry is unreleased until published from `master`.
+Build the current version from this checkout using the [build instructions](#build-and-verify). Published builds of this fork belong on [this fork's Releases page](https://github.com/SteffenCarlsen/vibranceGUI/releases); workflow artifacts belong to [this fork's Actions](https://github.com/SteffenCarlsen/vibranceGUI/actions). The changelog's current 3.0.0.0 entry is unreleased until published from `master`.
 
 The original project's website and historical contact links are listed under [attribution](#original-project-and-attribution). They are references to the original application, not the homepage, downloads, or support channels for this fork.
 
@@ -142,7 +142,7 @@ The default publish output is `artifacts\win-x64\vibrance.GUI.exe`. Publishing b
 
 The [Windows GitHub Actions workflow](.github/workflows/build.yml) builds, runs regression/UI checks, publishes the portable executable, and verifies its read-only diagnostic startup on pull requests, `master` pushes, and manual dispatch. A successful push to this fork's `master` then publishes a **regular release** from that exact verified executable. Pull requests and manual runs only produce workflow artifacts. A push containing several commits releases the pushed branch tip once.
 
-Each release includes `vibrance.GUI.exe`, `SHA256SUMS.txt`, and changelog notes containing the detailed commit descriptions and original issue/PR references since the nearest published ancestor release. Tags use the application version plus the full source commit, for example `v3.0.0+g<40-character-commit>`. The commit is build metadata rather than a prerelease suffix. About and the executable also include their source revision.
+Each release includes `vibrance.GUI.exe`, `SHA256SUMS.txt`, and changelog notes containing the detailed commit descriptions and original issue/PR references since the nearest published ancestor release. Tags use the application version plus the full source commit, for example `v3.0.0.0+g<40-character-commit>`. About and the executable also include their source revision.
 
 Uploads are completed in a draft before publication. Rerunning a failed job resumes its draft; rerunning a completed release keeps its published assets and can restore its Latest label if it still matches `master`. Release jobs publish one at a time, with up to 100 waiting jobs retained in [GitHub's concurrency queue](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency). Only a build matching the current `master` tip is marked Latest, so an older build finishing later cannot replace it. Release publication requires the workflow to be on `master`; local checks do not establish that a remote run has passed or a release exists.
 
@@ -179,7 +179,7 @@ The [original PR and issue review](docs/UPSTREAM_REVIEW.md) records the **2026-1
 
 This changelog covers this fork's changes after [original commit `919a9f2`](https://github.com/juv/vibranceGUI/commit/919a9f2). Dates use Europe/Copenhagen. Development entries describe implemented changes, not published releases. Earlier original-project history remains in the inherited Git history and original repository.
 
-### 2026-10-04 — 3.0.0 (unreleased)
+### 2026-10-04 — 3.0.0.0 (unreleased)
 
 #### Runtime and distribution
 
@@ -187,7 +187,7 @@ This changelog covers this fork's changes after [original commit `919a9f2`](http
 2. Added self-contained, single-file publishing with native runtime dependencies included and no separate .NET installation for users.
 3. Removed legacy Fody/service-locator dependencies, obsolete ADL bindings, and the bundled NVIDIA wrapper.
 4. Added portable publishing, stable SDK selection, Windows build/UI/regression workflow steps, and read-only GPU diagnostics.
-5. Added automatic regular releases after successful `master` pushes, with the verified portable executable, SHA-256 checksum, source-specific tags and detailed commit changelogs; removed the application's preview version suffix.
+5. Added automatic regular releases after successful `master` pushes, with the verified portable executable, SHA-256 checksum, source-specific tags and detailed commit changelogs; set the initial fork version to **3.0.0.0** without a preview suffix.
 
 The .NET migration supersedes the framework-only portion of original [PR #153](https://github.com/juv/vibranceGUI/pull/153). Runtime-bundled x64 publishing and the Windows checks are additional fork work.
 
