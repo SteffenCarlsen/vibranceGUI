@@ -151,6 +151,12 @@ The [mixed-output review on fork PR #1](https://github.com/SteffenCarlsen/vibran
 
 The new production-controller scenario failed against a copied pre-fix production assembly with `No qualifying primary color target suppressed the secondary display's resolution profile.` It now passes with fake supported secondary/unsupported primary outputs, zero out-of-scope color writes, independent secondary resolution application, duplicate suppression, scope changes, failed restoration retry, opt-out and cleanup. The Release build and full regression suite passed. These injected mode functions do not establish physical mixed-GPU modesets or sign-in behavior; no display settings or user application state were changed.
 
+## Scaling-only resolution requests — 2026-10-04
+
+The [scaling review on fork PR #1](https://github.com/SteffenCarlsen/vibranceGUI/pull/1#discussion_r4179161311) identified that Center and Stretch compared equal when the four core mode fields matched. The initial comparison now includes fixed-output scaling. Applied readback uses a separate comparison: the four core fields must match, while Default can represent Windows-normalized scaling. An explicit opposing Center/Stretch readback still fails when the scaling request was accepted. Drivers that reject the scaling field retain the existing test/fallback path, now clearing both the field flag and value before retesting.
+
+A probe of the copied pre-fix production assembly failed with `The pre-fix helper treated Center and Stretch as the same requested mode.` `ResolutionModeChecks` now passes against the production helper through injected native boundaries: complete-mode skip, scaling-only test/apply, accepted and opposing scaling, Default normalization, unsupported-field fallback, core readback mismatch and two rejected tests without modeset ownership. No physical mode API was called. The final `dotnet build vibrance.GUI.sln -c Release --no-incremental` passed with zero warnings/errors, the full production regression suite passed, and live/reentrant theme switching passed using task-owned previews with zero GPU/monitor lifecycle calls. The running application, user settings and physical displays were untouched.
+
 ## Remaining compatibility limits
 
 The [exhaustive upstream review](UPSTREAM_REVIEW.md) maps all **6 open PRs and 31 open issues** to implemented safeguards, deferred features, and required hardware checks. Source fixes are not blanket resolution of those reporters' machines.

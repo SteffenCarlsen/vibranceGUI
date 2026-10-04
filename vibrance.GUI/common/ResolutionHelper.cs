@@ -10,6 +10,11 @@ namespace vibrance.GUI.common
     class ResolutionHelper
     {
         private const int EnumCurrentSettings = -1;
+        private const uint DisplayFixedOutputField = 0x20000000;
+
+        internal delegate bool CurrentModeReader(out Devmode mode, string deviceName);
+        internal delegate DispChange DisplayModeChanger(string deviceName, ref Devmode mode, IntPtr window,
+            ChangeDisplaySettingsFlags flags, IntPtr parameter);
 
         [DllImport("user32.dll", EntryPoint = "EnumDisplaySettingsW", CharSet = CharSet.Unicode)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -81,8 +86,17 @@ namespace vibrance.GUI.common
         }
 
         internal static bool MatchesRequestedMode(ResolutionModeWrapper requested, Devmode actual) =>
+            MatchesRequestedTiming(requested, actual) && requested.DmDisplayFixedOutput == actual.dmDisplayFixedOutput;
+
+        private static bool MatchesRequestedTiming(ResolutionModeWrapper requested, Devmode actual) =>
             requested.DmPelsWidth == actual.dmPelsWidth && requested.DmPelsHeight == actual.dmPelsHeight &&
             requested.DmBitsPerPel == actual.dmBitsPerPel && requested.DmDisplayFrequency == actual.dmDisplayFrequency;
+
+        private static bool MatchesAppliedMode(ResolutionModeWrapper requested, Devmode actual, bool scalingRequested) =>
+            MatchesRequestedTiming(requested, actual) && (!scalingRequested ||
+                requested.DmDisplayFixedOutput == (uint)Dmdfo.Default ||
+                actual.dmDisplayFixedOutput == (uint)Dmdfo.Default ||
+                requested.DmDisplayFixedOutput == actual.dmDisplayFixedOutput);
 
         private static readonly HashSet<string> LoggedFailures = new HashSet<string>();
 
@@ -93,35 +107,50 @@ namespace vibrance.GUI.common
 
         public static bool ChangeResolutionEx(ResolutionModeWrapper resolutionMode, string lpszDeviceName, out bool modeSetAttempted)
         {
+            return ChangeResolutionEx(resolutionMode, lpszDeviceName, out modeSetAttempted,
+                GetCurrentResolutionSettings, EnumerateSupportedResolutionModes, ChangeDisplaySettingsEx,
+                result => ReportFailure(lpszDeviceName, resolutionMode, result));
+        }
+
+        internal static bool ChangeResolutionEx(ResolutionModeWrapper resolutionMode, string lpszDeviceName,
+            out bool modeSetAttempted, CurrentModeReader readCurrent,
+            Func<string, List<ResolutionModeWrapper>> enumerateModes, DisplayModeChanger changeMode,
+            Action<DispChange> reportFailure)
+        {
+            bool Fail(DispChange result) { reportFailure(result); return false; }
             modeSetAttempted = false;
-            if (resolutionMode != null && GetCurrentResolutionSettings(out Devmode mode, lpszDeviceName))
+            if (resolutionMode != null && readCurrent(out Devmode mode, lpszDeviceName))
             {
                 if (MatchesRequestedMode(resolutionMode, mode)) return true;
                 // Monitor mode buttons can change the supported modes while we are running.
-                if (!EnumerateSupportedResolutionModes(lpszDeviceName).Any(x =>
+                if (!enumerateModes(lpszDeviceName).Any(x =>
                     x.DmPelsWidth == resolutionMode.DmPelsWidth && x.DmPelsHeight == resolutionMode.DmPelsHeight &&
                     x.DmBitsPerPel == resolutionMode.DmBitsPerPel && x.DmDisplayFrequency == resolutionMode.DmDisplayFrequency))
-                    return ReportFailure(lpszDeviceName, resolutionMode, DispChange.DispChangeBadmode);
+                    return Fail(DispChange.DispChangeBadmode);
                 mode.dmPelsWidth = resolutionMode.DmPelsWidth;
                 mode.dmPelsHeight = resolutionMode.DmPelsHeight;
                 mode.dmBitsPerPel = resolutionMode.DmBitsPerPel;
                 mode.dmDisplayFrequency = resolutionMode.DmDisplayFrequency;
                 mode.dmDisplayFixedOutput = resolutionMode.DmDisplayFixedOutput;
-                mode.dmFields |= 0x00040000 | 0x00080000 | 0x00100000 | 0x00400000 | 0x20000000;
-                DispChange test = ChangeDisplaySettingsEx(lpszDeviceName, ref mode, IntPtr.Zero, ChangeDisplaySettingsFlags.CdsTest, IntPtr.Zero);
+                mode.dmFields |= 0x00040000 | 0x00080000 | 0x00100000 | 0x00400000 | DisplayFixedOutputField;
+                bool scalingRequested = true;
+                DispChange test = changeMode(lpszDeviceName, ref mode, IntPtr.Zero, ChangeDisplaySettingsFlags.CdsTest, IntPtr.Zero);
                 if (test != DispChange.DispChangeSuccessful)
                 {
                     // Some modern drivers reject the old fixed-output scaling field.
-                    mode.dmFields &= ~0x20000000u;
-                    test = ChangeDisplaySettingsEx(lpszDeviceName, ref mode, IntPtr.Zero, ChangeDisplaySettingsFlags.CdsTest, IntPtr.Zero);
+                    mode.dmFields &= ~DisplayFixedOutputField;
+                    mode.dmDisplayFixedOutput = (uint)Dmdfo.Default;
+                    scalingRequested = false;
+                    test = changeMode(lpszDeviceName, ref mode, IntPtr.Zero, ChangeDisplaySettingsFlags.CdsTest, IntPtr.Zero);
                 }
-                if (test != DispChange.DispChangeSuccessful) return ReportFailure(lpszDeviceName, resolutionMode, test);
+                if (test != DispChange.DispChangeSuccessful) return Fail(test);
                 // Game modes are temporary: do not persist a rejected/temporary mode in the registry.
                 modeSetAttempted = true;
-                DispChange changed = ChangeDisplaySettingsEx(lpszDeviceName, ref mode, IntPtr.Zero, ChangeDisplaySettingsFlags.CdsFullscreen, IntPtr.Zero);
-                if (changed != DispChange.DispChangeSuccessful) return ReportFailure(lpszDeviceName, resolutionMode, changed);
-                if (GetCurrentResolutionSettings(out Devmode achieved, lpszDeviceName) && MatchesRequestedMode(resolutionMode, achieved)) return true;
-                return ReportFailure(lpszDeviceName, resolutionMode, DispChange.DispChangeFailed);
+                DispChange changed = changeMode(lpszDeviceName, ref mode, IntPtr.Zero, ChangeDisplaySettingsFlags.CdsFullscreen, IntPtr.Zero);
+                if (changed != DispChange.DispChangeSuccessful) return Fail(changed);
+                // Windows reports Default for identity and newer scaling types, not the original scaling intent.
+                if (readCurrent(out Devmode achieved, lpszDeviceName) && MatchesAppliedMode(resolutionMode, achieved, scalingRequested)) return true;
+                return Fail(DispChange.DispChangeFailed);
             }
             return false;
         }
