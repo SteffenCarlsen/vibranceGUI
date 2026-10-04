@@ -139,6 +139,12 @@ No GitHub release, remote tag, push, or workflow run was created during local va
 
 The subsequent version follow-up set the application version to **3.0.0.0**, matching the assembly and file versions. Its Release build passed with zero warnings/errors; the compiled DLL reports `FileVersion: 3.0.0.0` and `ProductVersion: 3.0.0.0+f63391f8574eba4d6411d8a48b7aefff02b56f34`. Source inspection confirmed the existing workflow and release script accept the four-component version. The app was not restarted.
 
+## Autostart adapter preservation — 2026-10-04
+
+The adapter review on [fork PR #1](https://github.com/SteffenCarlsen/vibranceGUI/pull/1#discussion_r4179161300) identified that Run registration and path refresh discarded an explicit vendor override. Normal startup now keeps the explicit choice separate from the automatically selected backend and passes it to both registration paths. A supported existing Run command retains its override during path repair when the current launch has none; automatic entries remain automatic. Windows' command-line parser handles quoted and Unicode paths, with its allocation owned by a `SafeHandle` and released using `LocalFree`.
+
+The zero-warning/error Release build, production regression suite and existing live/reentrant theme-switch checks passed. `StartupChecks` executes the production parser/builder for automatic startup, both explicit vendors, unchanged/moved paths, quoting, Unicode, current-override precedence, and malformed/duplicate/unknown arguments. The tests use supplied command strings and do not write the user's Run key or settings. Sign-in execution remains a separate live acceptance case. The running application was not restarted; previously overwritten profiles are not recovered by this fix.
+
 ## Remaining compatibility limits
 
 The [exhaustive upstream review](UPSTREAM_REVIEW.md) maps all **6 open PRs and 31 open issues** to implemented safeguards, deferred features, and required hardware checks. Source fixes are not blanket resolution of those reporters' machines.

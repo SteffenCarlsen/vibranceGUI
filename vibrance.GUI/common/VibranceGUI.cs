@@ -16,6 +16,7 @@ namespace vibrance.GUI.common
         private readonly Func<int, string> _resolveLabelLevel;
         private readonly IVibranceProxy _v;
         private readonly bool _initializeRuntime;
+        private readonly GraphicsAdapter? _startupAdapterOverride;
         private const string AppName = "vibranceGUI";
         private bool _allowVisible = true, _loadingSettings = true, _settingsLoaded, _closing, _paused, _runtimeInitialized;
         private readonly PauseHotkeyBinding _pauseHotkey = new();
@@ -27,13 +28,14 @@ namespace vibrance.GUI.common
 
         public VibranceGUI(Func<List<ApplicationSetting>, Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>>, IVibranceProxy> getProxy,
             int defaultWindowsLevel, int minTrackBarValue, int maxTrackBarValue, int defaultIngameValue,
-            Func<int, string> resolveLabelLevel, bool initializeRuntime = true)
+            Func<int, string> resolveLabelLevel, bool initializeRuntime = true, GraphicsAdapter? startupAdapterOverride = null)
         {
             _minTrackBarValue = minTrackBarValue;
             _maxTrackBarValue = maxTrackBarValue;
             _defaultIngameValue = defaultIngameValue;
             _resolveLabelLevel = resolveLabelLevel;
             _initializeRuntime = initializeRuntime;
+            _startupAdapterOverride = startupAdapterOverride;
             _pauseHotkeyKeyData = AppTheme.PauseHotkeyKeyData;
             InitializeComponent();
             trackBarWindowsLevel.Minimum = minTrackBarValue;
@@ -86,7 +88,8 @@ namespace vibrance.GUI.common
             {
                 var registry = new RegistryController();
                 checkBoxAutostart.Checked = registry.IsProgramRegistered(AppName);
-                string startupPath = "\"" + Application.ExecutablePath + "\" -minimized";
+                string startupPath = StartupCommand.Build(Application.ExecutablePath, _startupAdapterOverride,
+                    registry.GetStartupCommand(AppName));
                 if (checkBoxAutostart.Checked && !registry.IsStartupPathUnchanged(AppName, startupPath)
                     && !registry.RegisterProgram(AppName, startupPath))
                     MessageBox.Show(this, "Updating Autostart Path failed!", AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -229,7 +232,8 @@ namespace vibrance.GUI.common
         {
             if (_loadingSettings || !_initializeRuntime) return;
             var registry = new RegistryController();
-            string path = "\"" + Application.ExecutablePath + "\" -minimized";
+            string path = StartupCommand.Build(Application.ExecutablePath, _startupAdapterOverride,
+                registry.GetStartupCommand(AppName));
             bool success = checkBoxAutostart.Checked ? registry.RegisterProgram(AppName, path) : registry.UnregisterProgram(AppName);
             if (!success)
             {

@@ -32,7 +32,8 @@ namespace vibrance.GUI
             }
             try
             {
-                var adapter = SelectAdapter(args);
+                GraphicsAdapter? adapterOverride = StartupCommand.ParseAdapterOverride(args);
+                var adapter = adapterOverride ?? GraphicsAdapterHelper.GetAdapter();
                 if (adapter == GraphicsAdapter.Unknown)
                 {
                     MessageBox.Show("No attached display with supported NVIDIA digital vibrance or AMD saturation control was found. " +
@@ -44,10 +45,10 @@ namespace vibrance.GUI
                 Func<List<ApplicationSetting>, Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>>, IVibranceProxy> factory =
                     (profiles, resolutions) => CreateProxy(adapter, profiles, resolutions);
                 using var window = adapter == GraphicsAdapter.Amd
-                    ? new VibranceGUI(factory, 100, 0, 300, 100, value => value.ToString() + "%")
+                    ? new VibranceGUI(factory, 100, 0, 300, 100, value => value.ToString() + "%", startupAdapterOverride: adapterOverride)
                     : new VibranceGUI(factory, NvidiaDynamicVibranceProxy.NvapiDefaultLevel, 0,
                         NvidiaDynamicVibranceProxy.NvapiMaxLevel, NvidiaDynamicVibranceProxy.NvapiDefaultLevel,
-                        value => NvidiaVibranceValueWrapper.Find(value).Percentage);
+                        value => NvidiaVibranceValueWrapper.Find(value).Percentage, startupAdapterOverride: adapterOverride);
                 if (args.Contains("-minimized", StringComparer.OrdinalIgnoreCase))
                 {
                     window.WindowState = FormWindowState.Minimized;
@@ -68,19 +69,6 @@ namespace vibrance.GUI
             {
                 mutex.ReleaseMutex();
             }
-        }
-
-        private static GraphicsAdapter SelectAdapter(string[] args)
-        {
-            int index = Array.FindIndex(args, argument => argument.Equals("--adapter", StringComparison.OrdinalIgnoreCase));
-            if (index >= 0)
-            {
-                if (index + 1 >= args.Length) throw new ArgumentException("--adapter requires nvidia or amd.");
-                if (args[index + 1].Equals("nvidia", StringComparison.OrdinalIgnoreCase)) return GraphicsAdapter.Nvidia;
-                if (args[index + 1].Equals("amd", StringComparison.OrdinalIgnoreCase)) return GraphicsAdapter.Amd;
-                throw new ArgumentException("--adapter requires nvidia or amd.");
-            }
-            return GraphicsAdapterHelper.GetAdapter();
         }
 
         internal static IVibranceProxy CreateProxy(GraphicsAdapter adapter, List<ApplicationSetting> profiles,

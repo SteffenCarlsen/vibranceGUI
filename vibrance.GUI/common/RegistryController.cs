@@ -49,5 +49,15 @@ namespace vibrance.GUI.common
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException || ex is System.Security.SecurityException || ex is System.IO.IOException) { return false; }
         }
+
+        public string GetStartupCommand(string appName)
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+                return key?.GetValue(appName) as string;
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException || ex is System.Security.SecurityException || ex is System.IO.IOException) { return null; }
+        }
     }
 }

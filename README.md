@@ -81,7 +81,7 @@ Autostart adds a value for the current executable to your Windows user's registr
 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
 ```
 
-The command quotes the executable path and adds `-minimized`, so the app starts in the tray when you sign in. No administrator rights are required. Unchecking autostart removes the value. If you move the executable, starting it manually from the new location refreshes an existing autostart entry. The checkbox tooltip summarizes this behavior.
+The command quotes the executable path and adds `-minimized`, so the app starts in the tray when you sign in. An explicit `--adapter amd` or `--adapter nvidia` choice is retained when enabling or refreshing autostart. Starting without an override preserves a valid existing autostart override during path repair; a new automatic entry keeps automatic GPU selection. No administrator rights are required. Unchecking autostart removes the value. If you move the executable, starting it manually from the new location refreshes an existing autostart entry. The checkbox tooltip summarizes this behavior.
 
 ## GPU support and limitations
 
@@ -231,9 +231,9 @@ Resolution safety reimplements behavior proposed in original [PR #159](https://g
 2. Applied shortcut changes live with conflict preservation, repeat suppression, stale-message rejection, and retained ownership until native registrations are released.
 3. Preserved the current shortcut while recording and kept an applied-but-unsaved shortcut active for the session with retryable feedback.
 4. Displayed shortcut instructions once, reserved feedback for errors, added the app icon, and sized the editor to content with wrapped errors, safe growth/shrinkage, and work-area handling.
-5. Retained per-user registry autostart and startup path refresh, and added a tooltip explaining tray launch at sign-in, removal, and the absence of an administrator requirement.
+5. Retained per-user registry autostart and startup path refresh, preserved explicit AMD/NVIDIA overrides across registration and executable moves, and added a tooltip explaining tray launch at sign-in, removal, and the absence of an administrator requirement.
 
-The pause/toggle idea is selectively reimplemented from original [PR #153](https://github.com/juv/vibranceGUI/pull/153) and [issue #143](https://github.com/juv/vibranceGUI/issues/143). Configurable capture, safe rebinding and the compact editor are fork improvements. Multipresets and gamma/brightness/contrast from those discussions remain deferred. Autostart behavior is retained from the original; its explanatory tooltip is new.
+The pause/toggle idea is selectively reimplemented from original [PR #153](https://github.com/juv/vibranceGUI/pull/153) and [issue #143](https://github.com/juv/vibranceGUI/issues/143). Configurable capture, safe rebinding and the compact editor are fork improvements. Multipresets and gamma/brightness/contrast from those discussions remain deferred. Autostart's explanatory tooltip and adapter-override preservation are fork improvements; the latter fixes [fork PR #1's adapter review](https://github.com/SteffenCarlsen/vibranceGUI/pull/1#discussion_r4179161300) and complements the mixed-driver selection work related to original [PR #157](https://github.com/juv/vibranceGUI/pull/157).
 
 #### Fork identity and attribution
 

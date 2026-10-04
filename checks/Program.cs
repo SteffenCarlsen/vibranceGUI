@@ -77,6 +77,7 @@ internal static class Checks
             CheckSettings(directory);
             CheckEquality();
             RuntimeChecks.Run();
+            StartupChecks.Run();
             HotkeyChecks.Run(directory);
             CheckThemeResolution();
             Console.WriteLine("PASS: settings roundtrip, independent recovery, Unicode paths, backups, ranges, profile validation and path equality.");
