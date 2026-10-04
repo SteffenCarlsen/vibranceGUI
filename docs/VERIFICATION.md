@@ -145,6 +145,12 @@ The adapter review on [fork PR #1](https://github.com/SteffenCarlsen/vibranceGUI
 
 The zero-warning/error Release build, production regression suite and existing live/reentrant theme-switch checks passed. `StartupChecks` executes the production parser/builder for automatic startup, both explicit vendors, unchanged/moved paths, quoting, Unicode, current-override precedence, and malformed/duplicate/unknown arguments. The tests use supplied command strings and do not write the user's Run key or settings. Sign-in execution remains a separate live acceptance case. The running application was not restarted; previously overwritten profiles are not recovered by this fix.
 
+## Resolution profiles with no color targets — 2026-10-04
+
+The [mixed-output review on fork PR #1](https://github.com/SteffenCarlsen/vibranceGUI/pull/1#discussion_r4179161305) identified a no-color-target return that also suppressed resolution handling. The production controller now returns early only when no profile matches. Resolution profiles still target the foreground monitor when primary-only color scope has no supported output; restoration, duplicate suppression and the global resolution opt-out retain their existing behavior.
+
+The new production-controller scenario failed against a copied pre-fix production assembly with `No qualifying primary color target suppressed the secondary display's resolution profile.` It now passes with fake supported secondary/unsupported primary outputs, zero out-of-scope color writes, independent secondary resolution application, duplicate suppression, scope changes, failed restoration retry, opt-out and cleanup. The Release build and full regression suite passed. These injected mode functions do not establish physical mixed-GPU modesets or sign-in behavior; no display settings or user application state were changed.
+
 ## Remaining compatibility limits
 
 The [exhaustive upstream review](UPSTREAM_REVIEW.md) maps all **6 open PRs and 31 open issues** to implemented safeguards, deferred features, and required hardware checks. Source fixes are not blanket resolution of those reporters' machines.

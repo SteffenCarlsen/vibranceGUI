@@ -68,6 +68,7 @@ internal static class RuntimeChecks
         Assert(controller.UnloadLibraryEx() && backend.Disposed, "Runtime cleanup did not release backend.");
         CheckPendingState(game);
         CheckResolutionOwnership();
+        CheckResolutionWithoutColorTargets();
         Console.WriteLine("PASS: GPU ABI/scales; no startup write; exact path matching; primary/all monitor scope; duplicate events; cross-monitor restore; pause; last-profile removal; failed-restore retry; exit.");
     }
 
@@ -144,15 +145,63 @@ internal static class RuntimeChecks
         Console.WriteLine("PASS: saved desktop activation; paused edits; scope-change retry; process fallback; no unowned resolution changes; rejected-test/external-mode race; partial apply and failed-restore retry.");
     }
 
+    private static void CheckResolutionWithoutColorTargets()
+    {
+        var original = Mode(1920, 1080, 144);
+        var modes = new FakeModes { Current = original };
+        var profile = new ApplicationSetting("Game", GamePath, 50,
+            new ResolutionModeWrapper(Mode(1280, 720, 120)), true);
+        var backend = new RecordingBackend("DISPLAY_B");
+        var controller = new ResolutionController(backend, new List<ApplicationSetting> { profile },
+            modes, original, resolutionDisplay: "DISPLAY_B");
+        Assert(controller.GetVibranceInfo().isInitialized, "The supported secondary output did not initialize the backend.");
+        controller.SetVibranceWindowsLevel(0);
+        controller.SetAffectPrimaryMonitorOnly(true);
+        controller.SetShouldRun(true);
+        controller.ApplyForeground("Game", "DISPLAY_B", GamePath);
+        Assert(modes.Current.dmPelsWidth == 1280 && modes.Devices.SequenceEqual(new[] { "DISPLAY_B" }),
+            "No qualifying primary color target suppressed the secondary display's resolution profile.");
+        Assert(backend.Writes.Count == 0, "Primary-only scope changed colors on the supported secondary display.");
+        controller.ApplyForeground("Game", "DISPLAY_B", GamePath);
+        Assert(modes.Calls.Count == 1, "Repeated foreground events reapplied an unchanged resolution.");
+
+        controller.SetAffectPrimaryMonitorOnly(false);
+        controller.ApplyForeground("Game", "DISPLAY_B", GamePath);
+        Assert(backend.Writes.Single() == ("DISPLAY_B", 50), "All-monitor scope did not apply the supported display's color.");
+        backend.FailDesktopRestore = true;
+        controller.SetAffectPrimaryMonitorOnly(true);
+        controller.ApplyForeground("Game", "DISPLAY_B", GamePath);
+        backend.FailDesktopRestore = false;
+        controller.ApplyForeground("Game", "DISPLAY_B", GamePath);
+        Assert(backend.Writes.TakeLast(2).All(write => write == ("DISPLAY_B", 0)) && modes.Calls.Count == 1,
+            "Scope changes did not retry color restoration while retaining the independent game resolution.");
+
+        modes.FailRestore = true;
+        controller.ApplyForeground("Explorer", "DISPLAY_A", @"C:\Windows\explorer.exe");
+        Assert(modes.Current.dmPelsWidth == 1280, "The failed restore fixture unexpectedly restored the mode.");
+        modes.FailRestore = false;
+        controller.ApplyForeground("Explorer", "DISPLAY_A", @"C:\Windows\explorer.exe");
+        Assert(modes.Current.dmPelsWidth == 1920 && modes.Devices.All(device => device == "DISPLAY_B"),
+            "The captured secondary-display mode was not retained and restored after failure.");
+        int reads = modes.ReadCount, writes = modes.Calls.Count;
+        controller.SetNeverSwitchResolution(true);
+        controller.ApplyForeground("Game", "DISPLAY_B", GamePath);
+        Assert(modes.ReadCount == reads && modes.Calls.Count == writes,
+            "Never change resolutions made resolution calls with no qualifying color target.");
+        Assert(controller.UnloadLibraryEx(), "Mixed-output resolution cleanup left an owned change behind.");
+        Console.WriteLine("PASS: independent resolution profiles with no color targets; duplicate suppression; scope changes; failed restoration retry; global resolution opt-out.");
+    }
+
     private static Devmode Mode(uint width, uint height, uint refresh) => new()
     { dmPelsWidth = width, dmPelsHeight = height, dmBitsPerPel = 32, dmDisplayFrequency = refresh };
 
     private sealed class ResolutionController : DisplayVibranceController
     {
-        public ResolutionController(RecordingBackend backend, List<ApplicationSetting> profiles, FakeModes modes, Devmode original)
+        public ResolutionController(RecordingBackend backend, List<ApplicationSetting> profiles, FakeModes modes, Devmode original,
+            string resolutionDisplay = "DISPLAY_A")
             : base(backend, GraphicsAdapter.Nvidia, 0, profiles,
                 new Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>>
-                { ["DISPLAY_A"] = Tuple.Create(new ResolutionModeWrapper(original), new List<ResolutionModeWrapper>()) },
+                { [resolutionDisplay] = Tuple.Create(new ResolutionModeWrapper(original), new List<ResolutionModeWrapper>()) },
                 subscribeToForegroundEvents: false, primaryDisplayName: "DISPLAY_A",
                 readResolution: modes.Read, changeResolution: modes.Change) { }
     }
@@ -163,10 +212,12 @@ internal static class RuntimeChecks
         public bool RejectAndChangeExternally, PartialApplyFailure, FailRestore;
         public int ReadCount;
         public List<ResolutionModeWrapper> Calls = new();
+        public List<string> Devices = new();
         public Devmode? Read(string _) { ReadCount++; return Current; }
-        public bool Change(ResolutionModeWrapper requested, string _, out bool attempted)
+        public bool Change(ResolutionModeWrapper requested, string device, out bool attempted)
         {
             Calls.Add(requested);
+            Devices.Add(device);
             attempted = false;
             if (RejectAndChangeExternally) { Current = Mode(3840, 2160, 60); return false; }
             attempted = true;
@@ -186,7 +237,9 @@ internal static class RuntimeChecks
 
     private sealed class RecordingBackend : IDisplayVibranceBackend
     {
-        public IReadOnlyList<string> DisplayNames => new[] { "DISPLAY_A", "DISPLAY_B" };
+        public RecordingBackend(params string[] displays) => DisplayNames = displays.Length == 0
+            ? new[] { "DISPLAY_A", "DISPLAY_B" } : displays;
+        public IReadOnlyList<string> DisplayNames { get; }
         public string GpuName => "Regression fake";
         public string InitializationError => "";
         public List<(string, int)> Writes { get; } = new();

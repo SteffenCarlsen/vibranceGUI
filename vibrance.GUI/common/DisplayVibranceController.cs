@@ -179,7 +179,7 @@ namespace vibrance.GUI.common
                     }
                     _desktopLevelPending = !applied;
                 }
-                if (profile == null || targets.Length == 0)
+                if (profile == null)
                 {
                     if (_changedDisplays.Count == 0 && _changedResolutions.Count == 0 && !_desktopLevelPending) _lastTransition = transition;
                     return;
