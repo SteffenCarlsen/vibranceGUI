@@ -1,100 +1,81 @@
-using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using System.Reflection;
+using System.Text.Json;
 using System.Threading;
 using System.Windows.Forms;
 using vibrance.GUI.AMD;
 using vibrance.GUI.AMD.vendor;
-using vibrance.GUI.AMD.vendor.utils;
 using vibrance.GUI.common;
 using vibrance.GUI.NVIDIA;
 
 namespace vibrance.GUI
 {
-    static class Program
+    internal static class Program
     {
-        private const string ErrorGraphicsAdapterUnknown = "Failed to determine your Graphic GraphicsAdapter type (NVIDIA/AMD). Make sure you have installed a proper GPU driver. Intel laptops are not supported as stated on the website. When installing your GPU driver did not work, please contact @juvlarN at twitter. Press Yes to open twitter in your browser now. Error: ";
-        private const string ErrorGraphicsAdapterAmbiguous = "Both NVIDIA and AMD graphic drivers have been found on your system. This can happen when you recently switched your graphic card and did not uninstall the old drivers. Make sure to uninstall unused graphic drivers to keep your system safe and stable. Use the program \"Display Driver Uninstaller\" to uninstall your old drivers!\n\nPress Yes to open \"Display Driver Uninstaller\" download website now.\nPress No to quit vibranceGUI.";
-        private const string MessageBoxCaption = "vibranceGUI Error";
-
         [STAThread]
-        static void Main(string[] args)
+        private static int Main(string[] args)
         {
-            bool result = false;
-            Mutex mutex = new Mutex(true, "vibranceGUI~Mutex", out result);
-            if (!result)
-            {
-                MessageBox.Show("You can run vibranceGUI only once at a time!", MessageBoxCaption, MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
+            using var mutex = new Mutex(true, "vibranceGUI~Mutex", out bool ownsMutex);
             ApplicationConfiguration.Initialize();
-            NativeMethods.SetDllDirectory(CommonUtils.GetVibrance_GUI_AppDataPath());
-
-            GraphicsAdapter adapter = GraphicsAdapterHelper.GetAdapter();
-            Form vibranceGui = null;
-
-            if (adapter == GraphicsAdapter.Amd)
+            if (!ownsMutex)
             {
-                Func<List<ApplicationSetting>, Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>>, IVibranceProxy> getProxy = (x, y) => new AmdDynamicVibranceProxy(Environment.Is64BitProcess
-                    ? new AmdAdapter64()
-                    : (IAmdAdapter)new AmdAdapter32(), x, y);
-                vibranceGui = new VibranceGUI(getProxy, 
-                    100, 
-                    0,
-                    300,
-                    100,
-                    x => x.ToString());
+                MessageBox.Show("You can run vibranceGUI only once at a time!", "vibranceGUI",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return 1;
             }
-            else if (adapter == GraphicsAdapter.Nvidia)
+            try
             {
-                const string nvidiaAdapterName = "vibranceDLL.dll";
-                string resourceName = $"{typeof(Program).Namespace}.NVIDIA.{nvidiaAdapterName}";
-                CommonUtils.LoadUnmanagedLibraryFromResource(
-                    Assembly.GetExecutingAssembly(),
-                    resourceName,
-                    nvidiaAdapterName);
-                Marshal.PrelinkAll(typeof(NvidiaDynamicVibranceProxy));
-
-                vibranceGui = new VibranceGUI(
-                    (x, y) => new NvidiaDynamicVibranceProxy(x, y),
-                    NvidiaDynamicVibranceProxy.NvapiDefaultLevel,
-                    NvidiaDynamicVibranceProxy.NvapiDefaultLevel,
-                    NvidiaDynamicVibranceProxy.NvapiMaxLevel,
-                    NvidiaDynamicVibranceProxy.NvapiDefaultLevel,
-                    x => NvidiaVibranceValueWrapper.Find(x).Percentage);
-            }
-            else if (adapter == GraphicsAdapter.Unknown)
-            {
-                string errorMessage = new Win32Exception(Marshal.GetLastWin32Error()).Message;
-                if (MessageBox.Show(ErrorGraphicsAdapterUnknown + errorMessage,
-                    MessageBoxCaption, MessageBoxButtons.YesNo, MessageBoxIcon.Error) == DialogResult.Yes)
+                var adapter = GraphicsAdapterHelper.GetAdapter();
+                if (adapter == GraphicsAdapter.Unknown)
                 {
-                    System.Diagnostics.Process.Start("https://twitter.com/juvlarN");
+                    MessageBox.Show("No attached display with supported NVIDIA digital vibrance or AMD saturation control was found. " +
+                        "Keep your integrated graphics and chipset drivers installed. Check which GPU your monitor is connected to. " +
+                        "You can run --diagnostics <file.json> for a read-only report.\n\n" + GraphicsAdapterHelper.LastError, "vibranceGUI",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return 2;
                 }
-                return;
-            }
-            else if(adapter == GraphicsAdapter.Ambiguous)
-            {
-                if(MessageBox.Show(ErrorGraphicsAdapterAmbiguous, MessageBoxCaption, MessageBoxButtons.YesNo, 
-                    MessageBoxIcon.Error) == DialogResult.Yes)
+                Func<List<ApplicationSetting>, Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>>, IVibranceProxy> factory =
+                    (profiles, resolutions) => CreateProxy(adapter, profiles, resolutions);
+                using var window = adapter == GraphicsAdapter.Amd
+                    ? new VibranceGUI(factory, 100, 0, 300, 100, value => value.ToString() + "%")
+                    : new VibranceGUI(factory, NvidiaDynamicVibranceProxy.NvapiDefaultLevel, 0,
+                        NvidiaDynamicVibranceProxy.NvapiMaxLevel, NvidiaDynamicVibranceProxy.NvapiDefaultLevel,
+                        value => NvidiaVibranceValueWrapper.Find(value).Percentage);
+                if (args.Contains("-minimized", StringComparer.OrdinalIgnoreCase))
                 {
-                    System.Diagnostics.Process.Start("http://www.guru3d.com/files-details/display-driver-uninstaller-download.html");
+                    window.WindowState = FormWindowState.Minimized;
+                    window.SetAllowVisible(false);
                 }
-                return;
+                window.Text += $" ({adapter.ToString().ToUpperInvariant()}, {Application.ProductVersion})";
+                Application.Run(window);
+                return 0;
             }
-            if (args.Contains("-minimized"))
+            catch (Exception ex)
             {
-                vibranceGui.WindowState = FormWindowState.Minimized;
-                ((VibranceGUI)vibranceGui).SetAllowVisible(false);
+                VibranceGUI.Log(ex);
+                MessageBox.Show("vibranceGUI could not start: " + ex.Message, "vibranceGUI",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 3;
             }
-            vibranceGui.Text += String.Format(" ({0}, {1})", adapter.ToString().ToUpper(), Application.ProductVersion);
-            Application.Run(vibranceGui);
-
-            GC.KeepAlive(mutex);
+            finally
+            {
+                mutex.ReleaseMutex();
+            }
         }
+
+
+
+        internal static IVibranceProxy CreateProxy(GraphicsAdapter adapter, List<ApplicationSetting> profiles,
+            Dictionary<string, Tuple<ResolutionModeWrapper, List<ResolutionModeWrapper>>> resolutions)
+        {
+            return adapter == GraphicsAdapter.Amd
+                ? new AmdDynamicVibranceProxy(Environment.Is64BitProcess ? new AmdAdapter64() : (IAmdAdapter)new AmdAdapter32(), profiles, resolutions)
+                : new NvidiaDynamicVibranceProxy(profiles, resolutions);
+        }
+
+
+
     }
 }

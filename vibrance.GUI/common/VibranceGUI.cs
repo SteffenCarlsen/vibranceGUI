@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -142,11 +142,14 @@ namespace vibrance.GUI.common
 
                 SetGuiEnabledFlag(true);
 
-                _v.SetApplicationSettings(_applicationSettings);
-                _v.SetShouldRun(true);
-                _v.SetVibranceWindowsLevel(vibranceWindowsLevel);
-                _v.SetAffectPrimaryMonitorOnly(affectPrimaryMonitorOnly);
-                _v.SetNeverSwitchResolution(neverSwitchResolution);
+                this.Invoke((MethodInvoker)delegate
+                {
+                    _v.SetApplicationSettings(_applicationSettings);
+                    _v.SetVibranceWindowsLevel(vibranceWindowsLevel);
+                    _v.SetAffectPrimaryMonitorOnly(affectPrimaryMonitorOnly);
+                    _v.SetNeverSwitchResolution(neverSwitchResolution);
+                    _v.SetShouldRun(true);
+                });
             }
         }
 
@@ -331,33 +334,17 @@ namespace vibrance.GUI.common
             }
         }
 
-        public static void Log(Exception ex)
-        {
-            using (StreamWriter w = File.AppendText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "vibranceGUI.log")))
-            {
-                w.Write("\r\nLog Entry : ");
-                w.WriteLine("{0} {1}", DateTime.Now.ToLongTimeString(),
-                    DateTime.Now.ToLongDateString());
-                w.WriteLine("Exception Found:\nType: {0}", ex.GetType().FullName);
-                w.WriteLine("Message: {0}", ex.Message);
-                w.WriteLine("Source: {0}", ex.Source);
-                w.WriteLine("Stacktrace: {0}", ex.StackTrace);
-                w.WriteLine("Exception String: {0}", ex.ToString());
+        public static void Log(Exception ex) => Log(ex.ToString());
 
-                w.WriteLine("-------------------------------");
-            }
-        }
-
-        public static void Log(string msg)
+        public static void Log(string message)
         {
-            using (StreamWriter w = File.AppendText("vibranceGUI_log.txt"))
+            try
             {
-                w.Write("\r\nLog Entry : ");
-                w.WriteLine("{0} {1}", DateTime.Now.ToLongTimeString(),
-                    DateTime.Now.ToLongDateString());
-                w.WriteLine(msg);
-                w.WriteLine("-------------------------------");
+                string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "vibranceGUI.log");
+                File.AppendAllText(path, DateTime.Now.ToString("O") + " " + message + Environment.NewLine);
             }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
         }
 
         private void ReadVibranceSettings(out int vibranceWindowsLevel, out bool affectPrimaryMonitorOnly, out bool neverSwitchResolution)

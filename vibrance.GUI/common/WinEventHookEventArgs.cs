@@ -9,6 +9,7 @@ namespace vibrance.GUI.common
         public Process Process { get; set; }
         public string WindowText { get; set; }
         public string ProcessName { get; set; }
+        public string ExecutablePath { get; set; }
         public string MainWindowTitle { get; set; }
         public IntPtr Handle { get; set; }
     }
