@@ -17,8 +17,6 @@ namespace vibrance.GUI.common
         private readonly IVibranceProxy _v;
         private readonly bool _initializeRuntime;
         private const string AppName = "vibranceGUI";
-        private const string TwitterLink = "https://twitter.com/juvlarN";
-        private const string PaypalDonationLink = "https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=JDQFNKNNEW356";
         private bool _allowVisible = true, _loadingSettings = true, _settingsLoaded, _closing, _paused, _runtimeInitialized;
         private readonly PauseHotkeyBinding _pauseHotkey = new();
         private Keys _pauseHotkeyKeyData;
@@ -395,9 +393,13 @@ namespace vibrance.GUI.common
             try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
             catch (Win32Exception ex) { MessageBox.Show(ex.Message, AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         }
-        private void twitterToolStripTextBox_Click(object sender, EventArgs e) => OpenLink(TwitterLink);
-        private void linkLabelTwitter_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e) => OpenLink(TwitterLink);
-        private void buttonPaypal_Click(object sender, EventArgs e) => OpenLink(PaypalDonationLink);
+        private void projectToolStripMenuItem_Click(object sender, EventArgs e) => OpenLink(AboutDialog.RepositoryUrl);
+        private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (_closing) return;
+            using var dialog = new AboutDialog(OpenLink);
+            dialog.ShowDialog(this);
+        }
         private void buttonAddProgram_Click(object sender, EventArgs e)
         {
             using var dialog = new OpenFileDialog { Filter = "Programs (*.exe)|*.exe|All files (*.*)|*.*", CheckFileExists = true, Multiselect = false };

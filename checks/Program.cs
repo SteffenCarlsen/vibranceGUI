@@ -64,6 +64,10 @@ internal static class Checks
                 Render(settingsForm, Path.ChangeExtension(args[2], null) + "-profile.png");
                 using var processForm = new PreviewProcessesWindow(form);
                 Render(processForm, Path.ChangeExtension(args[2], null) + "-processes.png");
+                using var about = new PreviewAboutDialog();
+                Render(about, Path.ChangeExtension(args[2], null) + "-about.png");
+                about.Size = about.MinimumSize;
+                Render(about, Path.ChangeExtension(args[2], null) + "-about-minimum.png");
                 Console.WriteLine("Rendered " + args[1] + " UI without starting monitoring or reading user settings.");
                 return 0;
             }
@@ -564,6 +568,11 @@ internal static class Checks
     private sealed class PreviewHotkeyDialog : HotkeyDialog
     {
         public PreviewHotkeyDialog(Keys current, Func<Keys, string> apply) : base(current, apply) { }
+        protected override bool ShowWithoutActivation => true;
+    }
+    private sealed class PreviewAboutDialog : AboutDialog
+    {
+        public PreviewAboutDialog() : base(_ => throw new InvalidOperationException("Rendering About must not open a browser.")) { }
         protected override bool ShowWithoutActivation => true;
     }
 }

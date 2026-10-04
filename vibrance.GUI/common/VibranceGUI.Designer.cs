@@ -54,7 +54,8 @@ namespace vibrance.GUI.common
             {
                 new ToolStripMenuItem("Show vibranceGUI", null, showToolStripMenuItem_Click),
                 pauseToolStripMenuItem, new ToolStripSeparator(),
-                new ToolStripMenuItem(TwitterLink, null, twitterToolStripTextBox_Click),
+                new ToolStripMenuItem("Project on GitHub", null, projectToolStripMenuItem_Click) { Name = "projectToolStripMenuItem", Tag = AboutDialog.RepositoryUrl },
+                new ToolStripMenuItem("About…", null, aboutToolStripMenuItem_Click) { Name = "aboutToolStripMenuItem" },
                 new ToolStripMenuItem("Exit", null, exitToolStripMenuItem_Click)
             });
             notifyIcon = new NotifyIcon(components)
@@ -176,14 +177,12 @@ namespace vibrance.GUI.common
             status.Controls.Add(statusLabel);
             layout.Controls.Add(status, 0, 3);
             var footer = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Margin = Padding.Empty };
-            footer.Controls.Add(new Label { Text = "Follow @juvlarN on twitter for updates: ", AutoSize = true, Margin = new Padding(0, 4, 0, 4) });
-            var twitterLink = new LinkLabel { Text = TwitterLink, AutoSize = true, LinkColor = AppTheme.LinkColor, ActiveLinkColor = AppTheme.LinkColor, VisitedLinkColor = AppTheme.LinkColor, Margin = new Padding(0, 4, 16, 4) };
-            twitterLink.LinkClicked += linkLabelTwitter_LinkClicked;
-            footer.Controls.Add(twitterLink);
-            var donateLink = new LinkLabel { Text = "Like the program? Consider donating:", AutoSize = true, LinkColor = AppTheme.LinkColor, ActiveLinkColor = AppTheme.LinkColor, VisitedLinkColor = AppTheme.LinkColor, Margin = new Padding(0, 4, 0, 4) };
-            donateLink.LinkClicked += (sender, args) => buttonPaypal_Click(sender, args);
-            toolTip.SetToolTip(donateLink, "Click here to donate to vibranceGUI through Paypal");
-            footer.Controls.Add(donateLink);
+            var repositoryLink = new LinkLabel { Name = "linkProject", Text = "GitHub", Tag = AboutDialog.RepositoryUrl, AutoSize = true, LinkColor = AppTheme.LinkColor, ActiveLinkColor = AppTheme.LinkColor, VisitedLinkColor = AppTheme.LinkColor, Margin = new Padding(0, 8, 18, 0) };
+            repositoryLink.LinkClicked += (sender, args) => projectToolStripMenuItem_Click(sender, args);
+            footer.Controls.Add(repositoryLink);
+            var aboutButton = AppTheme.Button("About…", aboutToolStripMenuItem_Click);
+            aboutButton.Name = "buttonAbout";
+            footer.Controls.Add(aboutButton);
             layout.Controls.Add(footer, 0, 4);
             layout.Layout += (sender, args) =>
             {
