@@ -23,6 +23,7 @@ namespace vibrance.GUI
 
             using var mutex = new Mutex(true, "vibranceGUI~Mutex", out bool ownsMutex);
             ApplicationConfiguration.Initialize();
+            AppTheme.Initialize();
             if (!ownsMutex)
             {
                 MessageBox.Show("You can run vibranceGUI only once at a time!", "vibranceGUI",
