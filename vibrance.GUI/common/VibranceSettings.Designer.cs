@@ -70,7 +70,7 @@ namespace vibrance.GUI.common
             checkBoxResolution = new CheckBox { Text = "Change Resolution when Ingame", AutoSize = true, Margin = new Padding(0, 0, 0, 10) };
             checkBoxResolution.CheckedChanged += checkBoxResolution_CheckedChanged;
             resolutionLayout.Controls.Add(checkBoxResolution);
-            cBoxResolution = new ComboBox { Dock = DockStyle.Top, DropDownStyle = ComboBoxStyle.DropDownList, Enabled = false, Margin = Padding.Empty, AccessibleName = "Ingame Resolution" };
+            cBoxResolution = new ThemedComboBox { Dock = DockStyle.Top, DropDownStyle = ComboBoxStyle.DropDownList, Enabled = false, Margin = Padding.Empty, AccessibleName = "Ingame Resolution" };
             resolutionLayout.Controls.Add(cBoxResolution);
             resolutionGroup.Controls.Add(resolutionLayout);
             layout.Controls.Add(resolutionGroup, 0, 2);

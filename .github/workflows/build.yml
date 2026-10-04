@@ -21,8 +21,12 @@ jobs:
         run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release
       - name: Live theme switching checks
         run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --theme-switch artifacts/theme-switch
+      - name: Windows system appearance startup
+        run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --render System artifacts/system-theme/startup.png
       - name: Shortcut editor checks
         run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --hotkey-ui artifacts/hotkey-ui
+      - name: Native dropdown contrast checks
+        run: dotnet run --project checks/vibrance.GUI.Checks.csproj -c Release --no-build -- --dropdowns artifacts/dropdowns
       - name: Publish portable executable
         shell: pwsh
         run: ./scripts/publish.ps1

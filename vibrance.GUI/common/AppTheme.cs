@@ -76,12 +76,35 @@ namespace vibrance.GUI.common
         public static void Initialize(ThemePreference preference)
         {
             _preferences.Theme = preference;
-            Application.SetColorMode(preference switch
+            bool highContrast = SystemInformation.HighContrast;
+            Application.SetColorMode(ResolveColorMode(preference, highContrast,
+                preference == ThemePreference.System && !highContrast ? ReadAppsUseLightTheme() : null));
+        }
+
+        internal static SystemColorMode ResolveColorMode(ThemePreference preference, bool highContrast, int? appsUseLightTheme)
+        {
+            if (highContrast) return SystemColorMode.Classic;
+            return preference switch
             {
                 ThemePreference.Dark => SystemColorMode.Dark,
                 ThemePreference.Light => SystemColorMode.Classic,
-                _ => SystemColorMode.System
-            });
+                // WinForms' System mode only detects OS dark mode on Windows 11.
+                // Resolve the Windows apps preference ourselves, while retaining System in settings.
+                _ => appsUseLightTheme == 0 ? SystemColorMode.Dark : SystemColorMode.Classic
+            };
+        }
+
+        private static int? ReadAppsUseLightTheme()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+                return key?.GetValue("AppsUseLightTheme") is int value ? value : null;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.Security.SecurityException)
+            {
+                return null; // Windows' default apps appearance is light when unavailable.
+            }
         }
 
         public static void Apply(ThemePreference preference)
@@ -173,6 +196,7 @@ namespace vibrance.GUI.common
             if (control is TrackBar slider)
                 // A known-color brush can retain the old native system palette after a live switch.
                 slider.BackColor = Color.FromArgb(SystemColors.Control.ToArgb());
+            if (control is ThemedComboBox combo) combo.RefreshThemeColors();
             if (control is Button button)
             {
                 button.FlatAppearance.BorderColor = SystemColors.ControlDark;

@@ -37,11 +37,19 @@ internal static class Checks
                 CheckNativeHotkeys();
                 return 0;
             }
+            if (args.Length == 2 && args[0] == "--dropdowns")
+            {
+                CheckDropdowns(args[1]);
+                return 0;
+            }
             if (args.Length == 3 && args[0] == "--render")
             {
                 Application.EnableVisualStyles();
                 Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
                 AppTheme.Initialize(Enum.Parse<ThemePreference>(args[1], true));
+                if (AppTheme.Preference == ThemePreference.System)
+                    Assert(Application.IsDarkModeEnabled == (!SystemInformation.HighContrast && SystemPrefersDark()),
+                        "System startup did not follow the Windows apps appearance setting before creating any forms.");
                 using var form = new PreviewWindow();
                 Render(form, args[2]);
                 form.Size = form.MinimumSize;
@@ -66,6 +74,7 @@ internal static class Checks
             CheckEquality();
             RuntimeChecks.Run();
             HotkeyChecks.Run(directory);
+            CheckThemeResolution();
             Console.WriteLine("PASS: settings roundtrip, independent recovery, Unicode paths, backups, ranges, profile validation and path equality.");
             return 0;
         }
@@ -181,6 +190,54 @@ internal static class Checks
         }
     }
 
+    private static void CheckDropdowns(string outputDirectory)
+    {
+        Application.EnableVisualStyles();
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
+        Directory.CreateDirectory(outputDirectory);
+        foreach (var initial in new[] { ThemePreference.Light, ThemePreference.Dark, ThemePreference.System })
+        {
+            AppTheme.Initialize(initial);
+            var backend = new PreviewProxy();
+            using var main = new PreviewWindow(backend);
+            var programs = (ListView)main.Controls.Find("listApplications", true).Single();
+            var modes = new List<ResolutionModeWrapper>
+            {
+                new() { DmPelsWidth = 1920, DmPelsHeight = 1080, DmBitsPerPel = 32, DmDisplayFrequency = 144 },
+                new() { DmPelsWidth = 1280, DmPelsHeight = 720, DmBitsPerPel = 32, DmDisplayFrequency = 120 },
+                new() { DmPelsWidth = 2560, DmPelsHeight = 1440, DmBitsPerPel = 32, DmDisplayFrequency = 144 }
+            };
+            using var profile = new PreviewSettingsWindow(programs.Items[0], modes, backend);
+            PrepareOffscreen(main);
+            PrepareOffscreen(profile);
+            Application.DoEvents();
+            var appearance = (ComboBox)main.Controls.Find("comboBoxTheme", true).Single();
+            var resolution = Descendants(profile).OfType<ComboBox>().Single();
+            Descendants(profile).OfType<CheckBox>().Single().Checked = true;
+            resolution.SelectedIndex = 1;
+            var handles = new[] { main.Handle, profile.Handle, appearance.Handle, resolution.Handle };
+            int mutations = backend.MutatingCalls;
+            int pass = 0;
+            foreach (var theme in new[] { initial, ThemePreference.Light, ThemePreference.Dark, ThemePreference.Light, ThemePreference.Dark, ThemePreference.System })
+            {
+                appearance.SelectedItem = theme;
+                Application.DoEvents();
+                string prefix = Path.Combine(outputDirectory, initial + "-" + pass++ + "-" + theme);
+                DropdownChecks.Verify(appearance, prefix + "-appearance.png");
+                DropdownChecks.Verify(resolution, prefix + "-resolution.png");
+                Assert(handles.SequenceEqual(new[] { main.Handle, profile.Handle, appearance.Handle, resolution.Handle }),
+                    "Dropdown painting or theme changes recreated an existing HWND.");
+                Assert(AppTheme.Preference == theme && (ThemePreference)appearance.SelectedItem! == theme && resolution.SelectedIndex == 1,
+                    "Dropdown painting or theme changes lost the selected theme or unsaved resolution.");
+                Assert(backend.MutatingCalls == mutations, "Dropdown painting changed GPU or monitoring state.");
+            }
+            resolution.Enabled = false;
+            DropdownChecks.Verify(resolution, Path.Combine(outputDirectory, initial + "-disabled-resolution.png"));
+        }
+        Console.WriteLine("PASS: native dropdown row/text contrast in fresh Light/Dark/System windows and repeated theme changes; selected/unselected/disabled rows; stable HWNDs/selections and zero GPU/monitor lifecycle calls.");
+    }
+
     private static void Render(Form form, string output)
     {
         // WM_PRINT skips children of invisible forms. Show only our fake-backed window
@@ -252,12 +309,16 @@ internal static class Checks
             Assert(programs.SelectedItems.Count == 1 && programs.SelectedItems[0].Text == "VALORANT", "Theme switching lost the selected game.");
             Assert(resolution.SelectedIndex == 1 && gameLevel.Value == 49 && desktopLevel.Value == 19, "Theme switching lost unsaved profile/desktop edits.");
             Assert(backend.MutatingCalls == mutationsBefore, "Theme switching changed vibrance or stopped/reinitialized monitoring.");
-            bool dark = theme == ThemePreference.Dark || theme == ThemePreference.System && SystemColors.Control.GetBrightness() < 0.5f;
+            bool dark = !SystemInformation.HighContrast && (theme == ThemePreference.Dark || theme == ThemePreference.System && SystemPrefersDark());
+            Assert(Application.IsDarkModeEnabled == dark, "The selected theme did not match the requested Windows apps appearance.");
             foreach (var window in windows)
             {
-                Assert((window.BackColor.GetBrightness() < 0.5f) == dark, "An existing window did not update its background.");
+                Assert(SystemInformation.HighContrast ? window.BackColor.ToArgb() == SystemColors.Control.ToArgb()
+                    : (window.BackColor.GetBrightness() < 0.5f) == dark, "An existing window did not update its background.");
                 foreach (var list in Descendants(window).OfType<ListView>())
-                    Assert((list.BackColor.GetBrightness() < 0.5f) == dark && (list.ForeColor.GetBrightness() > 0.5f) == dark,
+                    Assert(SystemInformation.HighContrast
+                        ? list.BackColor.ToArgb() == SystemColors.Window.ToArgb() && list.ForeColor.ToArgb() == SystemColors.WindowText.ToArgb()
+                        : (list.BackColor.GetBrightness() < 0.5f) == dark && (list.ForeColor.GetBrightness() > 0.5f) == dark,
                         "An existing list retained the previous theme's colors.");
                 CaptureWindow(window, Path.Combine(outputDirectory, theme + "-" + window.GetType().Name + ".png"));
                 AssertSliderBackground(window, dark);
@@ -336,6 +397,30 @@ internal static class Checks
         task.GetAwaiter().GetResult();
     }
 
+    private static bool SystemPrefersDark()
+    {
+        // Independent expectation from Windows intent, not the output palette under test.
+        using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+        return key?.GetValue("AppsUseLightTheme") is int value && value == 0;
+    }
+
+    private static void CheckThemeResolution()
+    {
+        Assert(AppTheme.ResolveColorMode(ThemePreference.System, false, 0) == SystemColorMode.Dark,
+            "System did not resolve a dark Windows apps setting.");
+        foreach (int? value in new int?[] { 1, null, -1, 999 })
+            Assert(AppTheme.ResolveColorMode(ThemePreference.System, false, value) == SystemColorMode.Classic,
+                "System did not resolve a light/default apps setting.");
+        Assert(AppTheme.ResolveColorMode(ThemePreference.Light, false, 0) == SystemColorMode.Classic
+            && AppTheme.ResolveColorMode(ThemePreference.Dark, false, 1) == SystemColorMode.Dark,
+            "Manual theme choice was overridden by Windows appearance.");
+        foreach (var theme in Enum.GetValues<ThemePreference>())
+            foreach (int? value in new int?[] { 0, 1, null })
+                Assert(AppTheme.ResolveColorMode(theme, true, value) == SystemColorMode.Classic,
+                    "High contrast did not retain the Windows system palette.");
+        Console.WriteLine("PASS: Windows apps theme resolution, manual overrides, unavailable settings, and high contrast precedence.");
+    }
+
     private static void AssertSliderBackground(Control parent, bool dark)
     {
         foreach (var slider in Descendants(parent).OfType<TrackBar>())
@@ -345,7 +430,8 @@ internal static class Checks
             using var bitmap = new Bitmap(slider.Width, slider.Height);
             slider.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
             var background = bitmap.GetPixel(3, 3);
-            Assert((background.GetBrightness() < 0.5f) == dark,
+            Assert(SystemInformation.HighContrast ? background.ToArgb() == SystemColors.Control.ToArgb()
+                : (background.GetBrightness() < 0.5f) == dark,
                 $"An existing {parent.GetType().Name} slider rendered the previous theme's background ({background}).");
         }
     }

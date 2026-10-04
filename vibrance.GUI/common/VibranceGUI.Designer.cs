@@ -123,7 +123,7 @@ namespace vibrance.GUI.common
 
             var appearance = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Margin = Padding.Empty };
             appearance.Controls.Add(new Label { Text = "Appearance", AutoSize = true, Margin = new Padding(0, 6, 12, 0) });
-            comboBoxTheme = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110, Margin = new Padding(0, 0, 18, 8), AccessibleName = "Appearance", Name = "comboBoxTheme" };
+            comboBoxTheme = new ThemedComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110, Margin = new Padding(0, 0, 18, 8), AccessibleName = "Appearance", Name = "comboBoxTheme" };
             foreach (ThemePreference preference in Enum.GetValues<ThemePreference>()) comboBoxTheme.Items.Add(preference);
             comboBoxTheme.SelectedIndexChanged += comboBoxTheme_SelectedIndexChanged;
             appearance.Controls.Add(comboBoxTheme);
